@@ -31,6 +31,12 @@ try:
 except ImportError:
     SYNOLOGY_ENABLED = False
 PUBLIC_APP_URL = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+USE_WORKOS = os.environ.get("USE_WORKOS", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 # NAS LAN address and share name the Windows launcher points its
 # desktop shortcut at, once WireGuard is connected. Separate from the
@@ -82,35 +88,65 @@ def load_user(user_id):
 
 @app.before_request
 def require_login():
-    """Every request must be an authenticated session. Anyone who isn't
-    logged in yet gets sent to /login, which bounces them to WorkOS's
-    hosted AuthKit page - no password form of our own to build or
-    secure."""
-    # The one-time device .conf/QR needs to survive two separate
-    # requests (the page load, then the <img> tag's own request to
-    # /qr) - so it can't be popped on the first one. Instead it's
-    # cleared here, the moment the visitor goes anywhere else.
-    if "_pending_conf" in session and request.endpoint not in ("device_created", "device_qr", "static"):
+    """Require an authenticated session.
+
+    Production uses WorkOS AuthKit.
+    Development can bypass WorkOS and use a local development user.
+    """
+    if "_pending_conf" in session and request.endpoint not in (
+        "device_created",
+        "device_qr",
+        "static",
+    ):
         session.pop("_pending_conf", None)
         session.pop("_pending_device_id", None)
 
     if current_user.is_authenticated:
         return
 
-    if request.endpoint in ("static", "login", "callback", "device_launcher_script"):
+    # Development authentication bypass
+    if not USE_WORKOS:
+        dev_email = os.environ.get(
+            "DEV_USER_EMAIL",
+            "developer@localhost",
+        )
+
+        user = User.query.filter_by(email=dev_email).first()
+
+        if user is None:
+            user = User(
+                email=dev_email,
+                is_admin=True,
+                first_name="Development",
+                last_name="User",
+            )
+            db.session.add(user)
+            db.session.commit()
+
+        login_user(user)
+        return
+
+    # Production / WorkOS authentication
+    if request.endpoint in (
+        "static",
+        "login",
+        "callback",
+        "device_launcher_script",
+    ):
         return
 
     return redirect(url_for("login", next=request.full_path))
 
-
 @app.route("/login")
 def login():
-    # Remember where the visitor was headed, and a random, unguessable
-    # state value we can verify on the way back in /callback - this is
-    # what stops someone from forging a callback request to log in as
-    # someone else.
+    if not USE_WORKOS:
+        return redirect(url_for("dashboard"))
+
     next_url = request.args.get("next", "")
-    session["_oauth_next"] = next_url if next_url.startswith("/") else url_for("dashboard")
+    session["_oauth_next"] = (
+        next_url if next_url.startswith("/")
+        else url_for("dashboard")
+    )
 
     state = secrets.token_urlsafe(24)
     session["_oauth_state"] = state
@@ -120,6 +156,8 @@ def login():
 
 @app.route("/callback")
 def callback():
+    if not USE_WORKOS:
+        return redirect(url_for("dashboard"))
     """WorkOS redirects here after the employee finishes logging in on
     AuthKit's hosted page. We verify the code, look up (or create, on
     first-ever visit) the matching local User row purely to track admin
@@ -877,4 +915,4 @@ def admin_delete_user(user_id):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=True)

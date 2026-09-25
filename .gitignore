@@ -5,3 +5,5 @@ development.md
 README.md
 .vscode/
 .idea/
+.venv/
+portal.db
