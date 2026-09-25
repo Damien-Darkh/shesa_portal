@@ -1,0 +1,7 @@
+__pycache__/
+.env
+static/images.ai
+development.md
+README.md
+.vscode/
+.idea/

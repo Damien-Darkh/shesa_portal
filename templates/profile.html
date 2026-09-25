@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_eye, icon_eye_off %}
+{% block title %}My profile · Portal{% endblock %}
+{% block content %}
+<h2>My profile</h2>
+
+<div class="card form-card">
+<form method="post">
+  <label>Email
+    <input type="email" value="{{ current_user.email }}" disabled
+           style="background:var(--surface-alt); color:var(--text-muted); cursor:not-allowed;">
+  </label>
+  <p class="field-hint">Your email is your login identity and can't be changed
+    here. Contact an admin if it needs updating.</p>
+
+  <div class="form-row">
+    <label>First name
+      <input type="text" name="first_name"
+             value="{{ current_user.first_name or '' }}" placeholder="Jane">
+    </label>
+    <label>Last name
+      <input type="text" name="last_name"
+             value="{{ current_user.last_name or '' }}" placeholder="Doe">
+    </label>
+  </div>
+
+  <button class="btn" type="submit">Save changes</button>
+</form>
+</div>
+
+{% if current_user.dsm_username %}
+<section>
+<h3>NAS password</h3>
+<p class="muted" style="max-width:56ch;">Your username for the company file
+  server is <strong class="mono">{{ current_user.dsm_username }}</strong>.
+  Use this form to change your password.</p>
+
+<div class="card form-card">
+<form method="post" action="{{ url_for('change_dsm_password') }}">
+  <p class="field-hint" style="margin:0 0 16px;">Must be at least 8 characters,
+    include upper and lower case letters and a number, and not contain your
+    name or username.</p>
+  <label class="password-field">New password
+    <input type="password" name="new_password" minlength="8" required
+           pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+           title="At least 8 characters, with upper and lower case letters and a number"
+           placeholder="At least 8 characters">
+    <button type="button" class="password-toggle" onclick="togglePassword(this)" aria-label="Show password">
+      {{ icon_eye('icon eye-show') }}{{ icon_eye_off('icon eye-hide') }}
+    </button>
+  </label>
+  <label class="password-field">Confirm new password
+    <input type="password" name="confirm_password" minlength="8" required
+           placeholder="Repeat the password above">
+    <button type="button" class="password-toggle" onclick="togglePassword(this)" aria-label="Show password">
+      {{ icon_eye('icon eye-show') }}{{ icon_eye_off('icon eye-hide') }}
+    </button>
+  </label>
+  <button class="btn" type="submit">Change NAS password</button>
+</form>
+</div>
+</section>
+{% endif %}
+{% endblock %}

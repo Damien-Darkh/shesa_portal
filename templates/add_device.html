@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_arrow_left, icon_plus %}
+{% block title %}Add a device · Portal{% endblock %}
+{% block content %}
+<a href="{{ url_for('dashboard') }}" class="back-link">{{ icon_arrow_left() }}Back to my devices</a>
+<h2>Add a device</h2>
+<p class="lede">Give this device a name you'll recognize later, e.g. "iPhone" or
+  "Work Laptop".</p>
+
+<div class="card form-card">
+<form method="post">
+  <label>Device name
+    <input type="text" name="device_name" placeholder="iPhone" autofocus required>
+  </label>
+  <button type="submit" class="btn">{{ icon_plus() }}Create VPN access</button>
+</form>
+</div>
+{% endblock %}

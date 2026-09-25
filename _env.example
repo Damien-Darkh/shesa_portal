@@ -1,0 +1,60 @@
+# Copy to ".env" and fill in real values. Never commit or share the real one.
+
+# A long random string - used to sign login session cookies.
+# Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
+FLASK_SECRET_KEY=changeme
+
+# --- WorkOS AuthKit (this is now the ONLY login step - no local passwords) ---
+# From your WorkOS dashboard -> API Keys.
+WORKOS_API_KEY=changeme
+WORKOS_CLIENT_ID=changeme
+
+# Must exactly match a redirect URI you've added in the WorkOS dashboard
+# under Redirects, e.g.:
+#   https://vpn.shesa.it/callback
+WORKOS_REDIRECT_URI=https://vpn.shesa.it/callback
+
+# --- Same OPNsense settings as the wg_onboard.py CLI tool ---
+OPNSENSE_URL=https://192.168.10.1
+OPNSENSE_API_KEY=changeme
+OPNSENSE_API_SECRET=changeme
+WG_INSTANCE_UUID=changeme
+WG_ENDPOINT=79.11.129.51
+WG_PORT=51820
+WG_SUBNET=10.10.10.0/24
+WG_DNS=192.168.11.254
+ALLOWED_IPS_CLIENT=192.168.11.0/24,10.10.10.0/24  # add other VLANs here explicitly if VPN clients should reach them
+VERIFY_SSL=false
+
+# The portal's real public URL - used to build the WorkOS logout return
+# URL and the Windows launcher's download link. Must match your actual
+# domain exactly.
+PUBLIC_APP_URL=https://vpn.shesa.it
+
+# --- Windows launcher (device_created.html's "Download Windows setup
+# file" button) --- leave both blank to disable this feature entirely;
+# the QR/.conf flow works fine without it.
+NAS_IP=192.168.11.3
+NAS_SHARE_NAME=Server
+# How long a downloaded .cmd stays valid before someone actually runs
+# it - reachable from both the device-created page and the dashboard
+# until then, so it survives navigating away in the meantime.
+LAUNCHER_TOKEN_TTL_MINUTES=60
+
+
+# Synology NAS - user provisioning (leave blank to disable this feature)
+DSM_URL=https://192.168.11.3:5001
+DSM_ADMIN_USER=changeme       # a dedicated limited DSM account, NOT your main admin
+DSM_ADMIN_PASS=changeme
+DSM_SHARE_GROUP=staff
+# DSM group admins' own NAS accounts join instead of DSM_SHARE_GROUP.
+# Leave unset to just use DSM_SHARE_GROUP for admins too.
+DSM_ADMIN_GROUP=staff
+
+#SMTP
+SMTP_SERVER=smtps.aruba.it
+SMTP_PORT=465
+SMTP_USER=your-email@yourdomain.it
+SMTP_PASSWORD=YourActualArubaPassword
+SENDER_EMAIL=your-email@yourdomain.it
+PORTAL_URL=https://portal.yourdomain.com

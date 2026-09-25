@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_arrow_left, icon_power, icon_refresh, icon_trash, icon_plus, icon_alert, icon_inbox %}
+{% block title %}Edit employee · Portal{% endblock %}
+{% block content %}
+<a href="{{ url_for('admin_panel') }}" class="back-link">{{ icon_arrow_left() }}Back to employees</a>
+
+<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:6px; flex-wrap:wrap;">
+  <h2 style="margin-bottom:2px;">
+    {% if user.first_name or user.last_name %}{{ (user.first_name or '') ~ ' ' ~ (user.last_name or '') }}
+    {% else %}{{ user.email }}{% endif %}
+  </h2>
+  {% if user.disabled %}<span class="status status--off"><span class="pulse"></span>Disabled{{ ' · Admin' if user.is_admin else '' }}</span>
+  {% else %}<span class="status status--active"><span class="pulse is-live"></span>Active{{ ' · Admin' if user.is_admin else '' }}</span>{% endif %}
+</div>
+<p class="muted" style="margin:0 0 20px;">{{ user.email }}</p>
+
+<div class="card form-card">
+<form method="post" id="edit-user-form">
+  <div class="form-row">
+    <label>First name
+      <input type="text" name="first_name" value="{{ user.first_name or '' }}" placeholder="Jane">
+    </label>
+    <label>Last name
+      <input type="text" name="last_name" value="{{ user.last_name or '' }}" placeholder="Doe">
+    </label>
+  </div>
+
+  <label>Email
+    <input type="email" name="email" value="{{ user.email }}" required>
+  </label>
+
+  <button class="btn" type="submit">Save changes</button>
+</form>
+</div>
+
+<section>
+<h3>Devices</h3>
+<div class="table-wrap">
+<table>
+  <tr><th>Device</th><th>Address</th><th>Added</th><th>Status</th><th></th></tr>
+  {% for d in user.devices %}
+  <tr>
+    <td>{{ d.device_name }}</td>
+    <td class="mono">{{ d.wg_address }}</td>
+    <td>{{ d.created_at.strftime('%Y-%m-%d') }}</td>
+    <td>
+      {% if d.is_revoked %}<span class="status status--off"><span class="pulse"></span>Disconnected</span>
+      {% else %}<span class="status status--active"><span class="pulse is-live"></span>Active</span>{% endif %}
+    </td>
+    <td>
+      <div class="cell-actions">
+      {% if not d.is_revoked %}
+      <form method="post" action="{{ url_for('revoke_device', device_id=d.id) }}"
+            onsubmit="return confirm('Disconnect {{ d.device_name }}? This device will lose VPN access immediately.');">
+        <button class="danger btn-sm" type="submit">{{ icon_power() }}Disconnect</button>
+      </form>
+      {% elif not d.auto_revoked %}
+      <form method="post" action="{{ url_for('reconnect_device', device_id=d.id) }}">
+        <button class="secondary btn-sm" type="submit">{{ icon_refresh() }}Reconnect</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('delete_device', device_id=d.id) }}"
+            onsubmit="return confirm('Permanently delete {{ d.device_name }}? This removes the VPN peer entirely and cannot be undone.');">
+        <button class="danger btn-sm" type="submit">{{ icon_trash() }}Delete</button>
+      </form>
+      </div>
+    </td>
+  </tr>
+  {% else %}
+  <tr class="empty-row"><td colspan="5">
+    <div class="empty-state">{{ icon_inbox('icon icon-lg') }}<span>No devices.</span></div>
+  </td></tr>
+  {% endfor %}
+</table>
+</div>
+
+<form method="post" action="{{ url_for('admin_add_device', user_id=user.id) }}" class="form-card" style="margin-top:16px;">
+  <label>Add a device for this employee
+    <input type="text" name="device_name" placeholder="iPhone" required>
+  </label>
+  <button class="btn" type="submit">{{ icon_plus() }}Create VPN access</button>
+</form>
+</section>
+
+{% if user.id != current_user.id %}
+<hr class="divider">
+<section>
+<h3 style="color:var(--danger); display:flex; align-items:center; gap:7px;">{{ icon_alert() }}Danger zone</h3>
+
+<div class="kv-card" style="background:var(--danger-soft); border-color:var(--danger-border); margin-bottom:16px;">
+  <label class="checkbox-row" style="margin-bottom:10px;">
+    <input type="checkbox" name="is_admin" form="edit-user-form" {% if user.is_admin %}checked{% endif %}>
+    Admin — can manage employees and devices
+  </label>
+  <label class="checkbox-row" style="margin-bottom:12px;">
+    <input type="checkbox" name="disabled" form="edit-user-form" {% if user.disabled %}checked{% endif %}>
+    Disabled — revokes all their devices immediately on save
+  </label>
+  <button class="btn secondary btn-sm" type="submit" form="edit-user-form">Save changes</button>
+</div>
+
+<p class="muted" style="max-width:56ch;">Permanently deletes this employee, revokes
+  and removes every device they have, and deletes their WorkOS account. This
+  cannot be undone — use the Disabled checkbox above instead if you just want
+  to suspend access temporarily.</p>
+<form method="post" action="{{ url_for('admin_delete_user', user_id=user.id) }}"
+      onsubmit="return confirm('Permanently delete {{ user.email }} and all of their devices? This cannot be undone.');">
+  <button class="danger" type="submit">{{ icon_trash() }}Delete employee</button>
+</form>
+</section>
+{% else %}
+<p class="muted" style="margin-top:12px;">You can't change your own admin or disabled status here.</p>
+{% endif %}
+{% endblock %}

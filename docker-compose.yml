@@ -1,0 +1,29 @@
+services:
+  app:
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_PATH=/app/data/portal.db
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - app_data:/app/data
+    ports:
+      - "127.0.0.1:8081:5000"
+    networks:
+      - portal_network
+    dns:
+      - 192.168.11.254
+      - 8.8.8.8 
+volumes:
+  app_data:
+
+networks:
+  portal_network:
+    name: portal_default
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1

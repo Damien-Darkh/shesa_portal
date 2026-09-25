@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_plus, icon_pencil, icon_inbox %}
+{% block title %}Employees · Portal{% endblock %}
+{% block content %}
+<h2>Employees</h2>
+<p class="lede">Accounts also appear here automatically the first time someone signs
+  in through WorkOS AuthKit — you don't have to add everyone by hand. Who's
+  <em>allowed</em> to reach the login page at all is controlled in your WorkOS
+  dashboard (e.g. restricted to your email domain), not here.</p>
+
+<div class="btn-row" style="margin-bottom:20px;">
+  <a class="btn" href="{{ url_for('new_employee_page') }}">{{ icon_plus() }}Add employee</a>
+</div>
+
+<div class="table-wrap">
+<table>
+  <tr><th>Name</th><th>Email</th><th>Role</th><th>Devices</th><th>Status</th><th></th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{% if u.first_name or u.last_name %}{{ (u.first_name or '') ~ ' ' ~ (u.last_name or '') }}
+        {% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{{ u.email }}</td>
+    <td>
+      {% if u.is_admin %}<span class="status status--admin">Admin</span>
+      {% else %}<span class="status status--staff">Staff</span>{% endif %}
+    </td>
+    <td>{{ u.devices|rejectattr('is_revoked')|list|length }} active</td>
+    <td>
+      {% if u.disabled %}<span class="status status--off"><span class="pulse"></span>Disabled</span>
+      {% else %}<span class="status status--active"><span class="pulse is-live"></span>Active</span>{% endif %}
+    </td>
+    <td><a class="btn secondary btn-sm" href="{{ url_for('edit_user', user_id=u.id) }}">{{ icon_pencil() }}Edit</a></td>
+  </tr>
+  {% else %}
+  <tr class="empty-row"><td colspan="6">
+    <div class="empty-state">{{ icon_inbox('icon icon-lg') }}<span>No employees yet. Add one to get started.</span></div>
+  </td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_plus, icon_power, icon_refresh, icon_download, icon_inbox %}
+{% block title %}My devices · Portal{% endblock %}
+{% block content %}
+<h2>My VPN devices</h2>
+<p class="lede">Each device you connect with — laptop, phone, tablet — needs its
+  own setup. Add a new one below, or disconnect one you no longer use.</p>
+
+<div class="btn-row" style="margin-bottom:20px;">
+  <a class="btn" href="{{ url_for('add_device') }}">{{ icon_plus() }}Add a device</a>
+</div>
+
+<div class="table-wrap">
+<table>
+  <tr><th>Device</th><th>Address</th><th>Added</th><th>Status</th><th></th></tr>
+  {% for d in devices %}
+  <tr>
+    <td>{{ d.device_name }}</td>
+    <td class="mono">{{ d.wg_address }}</td>
+    <td>{{ d.created_at.strftime('%Y-%m-%d') }}</td>
+    <td>
+      {% if d.is_revoked %}<span class="status status--off"><span class="pulse"></span>Disconnected</span>
+      {% else %}<span class="status status--active"><span class="pulse is-live"></span>Active</span>{% endif %}
+    </td>
+    <td>
+      <div class="cell-actions">
+      {% if not d.is_revoked %}
+      <form method="post" action="{{ url_for('revoke_device', device_id=d.id) }}"
+            onsubmit="return confirm('Disconnect {{ d.device_name }}? This device will lose VPN access immediately.');">
+        <button class="danger btn-sm" type="submit">{{ icon_power() }}Disconnect</button>
+      </form>
+      {% elif not d.auto_revoked %}
+      <form method="post" action="{{ url_for('reconnect_device', device_id=d.id) }}">
+        <button class="secondary btn-sm" type="submit">{{ icon_refresh() }}Reconnect</button>
+      </form>
+      {% endif %}
+      {% if d.launcher_available %}
+      <a class="btn ghost btn-sm" href="{{ url_for('device_launcher_cmd', device_id=d.id) }}">{{ icon_download() }}Windows setup file</a>
+      {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% else %}
+  <tr class="empty-row"><td colspan="5">
+    <div class="empty-state">{{ icon_inbox('icon icon-lg') }}<span>No devices yet — add one above to get connected.</span></div>
+  </td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

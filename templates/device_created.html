@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_lock, icon_copy, icon_download %}
+{% block title %}Set up device · Portal{% endblock %}
+{% block content %}
+<h2>Set up "{{ device.device_name }}"</h2>
+<div class="callout callout--danger">
+  {{ icon_lock() }}
+  <div>
+    <strong>This is shown only once.</strong> Scan the QR code into the WireGuard
+    app now. If you navigate away before finishing, you'll need to disconnect
+    this device and add it again.
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px;">
+  <p class="eyebrow" style="margin-bottom:14px;">Step 1</p>
+  <p style="margin-top:0;"><strong>Install the WireGuard app</strong> on this
+    device if you haven't already (App Store / Play Store / wireguard.com).</p>
+
+  <p class="eyebrow" style="margin:22px 0 14px;">Step 2</p>
+  <p style="margin-top:0;"><strong>Scan this QR code</strong> from within the
+    WireGuard app ("Add tunnel" &rarr; "Scan from QR code"):</p>
+
+  <img src="{{ url_for('device_qr', device_id=device.id) }}" alt="WireGuard QR code"
+       style="max-width: 240px; display:block; margin: 4px 0 4px; border:1px solid var(--border); border-radius: var(--radius); padding:10px;">
+</div>
+
+<p class="muted" style="margin-bottom:8px;">Can't scan a QR code on this device?
+  Copy the text below into a new WireGuard tunnel manually instead:</p>
+<div style="position:relative;">
+  <pre id="wg-conf">{{ conf }}</pre>
+  <button type="button" class="btn secondary btn-sm" style="position:absolute; top:10px; right:10px;"
+          onclick="copyText(this, document.getElementById('wg-conf').innerText)">{{ icon_copy() }}<span class="btn-label">Copy config</span></button>
+</div>
+
+{% if device.launcher_available %}
+<div class="card" style="margin:20px 0; background: var(--surface-alt);">
+  <p style="margin-top:0;"><strong>On a Windows work computer instead?</strong>
+    This one file installs WireGuard if needed, connects it, and sets up a
+    shortcut to the company NAS — no manual setup required.</p>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('device_launcher_cmd', device_id=device.id) }}">
+      {{ icon_download() }}Download Windows setup file
+    </a>
+  </div>
+  <p class="muted" style="margin:12px 0 0;">This link works for one hour or
+    until you run it, whichever comes first — you can also get back to it later
+    from your device list on the dashboard. Windows may show a security prompt
+    when it runs; that's expected — choose "More info" then "Run anyway".</p>
+</div>
+{% endif %}
+
+<a class="btn" href="{% if current_user.is_admin and device.user_id != current_user.id %}{{ url_for('edit_user', user_id=device.user_id) }}{% else %}{{ url_for('dashboard') }}{% endif %}">Done, back to devices</a>
+{% endblock %}

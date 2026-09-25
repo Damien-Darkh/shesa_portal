@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_lock, icon_copy %}
+{% block title %}Employee created · Portal{% endblock %}
+{% block content %}
+<h2>Employee created</h2>
+<p class="lede">Account created for <strong>{{ user.email }}</strong>.</p>
+
+{% if temp_password %}
+<div class="callout callout--danger">
+  {{ icon_lock() }}
+  <div>
+    <strong>This password will only be shown once.</strong> Save it or hand this
+    temporary NAS credential to the employee now — it can't be retrieved again
+    after you leave this page.
+  </div>
+</div>
+
+<div class="kv-card">
+  <div class="kv-row">
+    <span class="kv-label">DSM username</span>
+    <span class="kv-value">{{ user.dsm_username }}</span>
+  </div>
+  <div class="kv-row">
+    <span class="kv-label">Temporary password</span>
+    <span class="kv-value" id="temp-pw">{{ temp_password }}</span>
+  </div>
+</div>
+<div class="btn-row" style="margin-bottom:20px;">
+  <button type="button" class="btn secondary btn-sm" onclick="copyText(this, '{{ temp_password }}')">{{ icon_copy() }}<span class="btn-label">Copy password</span></button>
+</div>
+{% else %}
+<p class="muted">No temporary DSM password to display — either this user is an
+  admin, DSM is disabled, or the password was already viewed.</p>
+{% endif %}
+
+<a href="{{ url_for('admin_panel') }}" class="btn">Back to employee list</a>
+{% endblock %}

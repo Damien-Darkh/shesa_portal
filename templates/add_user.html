@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "icons.html" import icon_plus, icon_arrow_left %}
+{% block title %}Add an employee · Portal{% endblock %}
+{% block content %}
+<a href="{{ url_for('admin_panel') }}" class="back-link">{{ icon_arrow_left() }}Back to employees</a>
+<h2>Add an employee</h2>
+<p class="lede">Pre-create their account before their first login. This provisions
+  a WorkOS identity and, if enabled, a NAS account with a temporary password
+  you'll be shown once on the next page.</p>
+
+<div class="card form-card">
+<form method="post" action="{{ url_for('admin_add_user') }}">
+  <label>Email
+    <input type="email" name="email" placeholder="name@yourcompany.com" required autofocus>
+  </label>
+  <div class="form-row">
+    <label>First name
+      <input type="text" name="first_name" placeholder="Jane">
+    </label>
+    <label>Last name
+      <input type="text" name="last_name" placeholder="Doe">
+    </label>
+  </div>
+  <label class="checkbox-row">
+    <input type="checkbox" name="is_admin"> Make this person an admin too
+  </label>
+  <div class="btn-row">
+    <button class="btn" type="submit">{{ icon_plus() }}Add employee</button>
+    <a href="{{ url_for('admin_panel') }}" class="btn ghost">Cancel</a>
+  </div>
+</form>
+</div>
+{% endblock %}
