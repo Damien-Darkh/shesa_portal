@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Add Employee - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div>
+      <a href="admin.html" class="btn btn-outline" style="margin-bottom:1rem;"><i data-lucide="arrow-left"></i> Back to employees</a>
+      <div class="page-title-section">
+        <p class="subtitle">Administration</p>
+        <h1 class="title">Add Employee</h1>
+        <p class="description">Fill out the employee information. Only office location, bio and photo are optional.</p>
+      </div>
+    </div>
+
+    <form id="add-user-form" class="card space-y">
+      <div class="form-group">
+        <label class="form-label" for="u-email">Email address <span style="color:#b91c1c" aria-hidden="true">*</span></label>
+        <input type="email" id="u-email" class="form-input" placeholder="name@company.com" autocomplete="off" required autofocus>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label" for="u-firstname">First name <span style="color:#b91c1c" aria-hidden="true">*</span></label><input type="text" id="u-firstname" class="form-input" placeholder="Jane" required></div>
+        <div class="form-group"><label class="form-label" for="u-lastname">Last name <span style="color:#b91c1c" aria-hidden="true">*</span></label><input type="text" id="u-lastname" class="form-input" placeholder="Doe" required></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label" for="u-jobtitle">Job title <span style="color:#b91c1c" aria-hidden="true">*</span></label><input type="text" id="u-jobtitle" class="form-input" placeholder="Software Engineer" required></div>
+        <div class="form-group">
+          <label class="form-label" for="u-dept">Department <span style="color:#b91c1c" aria-hidden="true">*</span></label>
+          <select id="u-dept" class="form-input" required></select>
+          <a href="admin.html#departments" class="form-hint">Add or edit departments</a>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label" for="u-phone">Phone <span style="color:#b91c1c" aria-hidden="true">*</span></label><input type="tel" id="u-phone" class="form-input" placeholder="+39 333 000 0000" required></div>
+        <div class="form-group"><label class="form-label" for="u-office">Office location <span style="font-weight:400;color:var(--text-muted)">(Optional)</span></label><input type="text" id="u-office" class="form-input" placeholder="e.g. Main office, floor 2"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="u-photo">Avatar photo URL <span style="font-weight:400;color:var(--text-muted)">(Optional)</span></label>
+        <div class="avatar-container" style="margin-bottom:.75rem;"><div class="avatar-box" id="avatar-preview-box"><span>--</span></div></div>
+        <div style="display:flex;gap:.5rem;align-items:center;">
+          <input type="text" id="u-photo" class="form-input" placeholder="./images/avatar.jpg" style="flex:1;">
+          <input type="file" id="u-photo-file" accept="image/*" hidden>
+          <button type="button" id="u-browse-btn" class="btn btn-outline" style="white-space:nowrap;"><i data-lucide="folder-open"></i> Browse...</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="u-bio">Bio <span style="font-weight:400;color:var(--text-muted)">(Optional)</span></label>
+        <textarea id="u-bio" rows="3" class="form-input" maxlength="500"></textarea>
+      </div>
+
+      <label class="checkbox-row"><input type="checkbox" id="e-isadmin"> Administrator (can manage employees, devices and leave)</label>
+      <div class="callout callout--info"><i data-lucide="info"></i><div>A NAS account is created automatically. The employee gets a temporary password and must set their own at first sign-in.</div></div>
+
+      <p class="error-text" id="form-error" role="alert" hidden></p>
+      <div class="modal-actions" style="margin-top:1rem;">
+        <a href="admin.html" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary" style="margin-top:0;"><i data-lucide="user-plus"></i> Add Employee</button>
+      </div>
+    </form>
+  </main>
+
+  <script type="module" src="./pages/add_user.js"></script>
+</body>
+</html>

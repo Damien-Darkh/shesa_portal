@@ -1,0 +1,102 @@
+# root/docker-compose.authentik.yml
+# Local/test identity server (Authentik) for the portal.
+# Start the whole stack with:
+#   docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --build
+#
+# Address used everywhere: http://sso.shesa.local:9000
+#   - Browser: map it in the hosts file (see README, "Local Authentik").
+#   - Portal container: resolves it through the Docker network alias below.
+#
+# Authentik containers do NOT load .env (no env_file). Portal settings such as
+# DJANGO_SETTINGS_MODULE would otherwise be picked up by Authentik and break it.
+services:
+
+  authentik-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:?set AUTHENTIK_PG_PASS in .env}
+    volumes:
+      - authentik_db:/var/lib/postgresql/data
+    networks:
+      - portal_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik -d authentik"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  authentik-redis:
+    # Used by Authentik releases that still need Redis; harmless on newer releases.
+    image: redis:alpine
+    command: --save 60 1 --loglevel warning
+    networks:
+      - portal_network
+    restart: unless-stopped
+
+  authentik-server:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server:latest}
+    command: server
+    environment: &authentik_env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env}
+      AUTHENTIK_HOST: http://sso.shesa.local:9000
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:?}
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:?set AUTHENTIK_BOOTSTRAP_PASSWORD in .env}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@shesa.local}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      # Read by authentik/blueprints/shesa-portal.yaml so the portal and Authentik agree.
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID in .env}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?set OIDC_CLIENT_SECRET in .env}
+      PORTAL_BASE_URL: ${PORTAL_BASE_URL:-http://localhost:8000}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:8000/accounts/oidc/authentik/login/callback/}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9443:9443"
+    volumes:
+      - ./authentik/blueprints:/blueprints/custom
+      - authentik_media:/media
+      - authentik_certs:/certs
+    networks:
+      portal_network:
+        aliases:
+          - sso.shesa.local
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+    restart: unless-stopped
+
+  authentik-worker:
+    # Must run the same release as the server.
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server:latest}
+    command: worker
+    environment: *authentik_env
+    volumes:
+      - ./authentik/blueprints:/blueprints/custom
+      - authentik_media:/media
+      - authentik_certs:/certs
+    networks:
+      - portal_network
+    depends_on:
+      authentik-postgres:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_started
+    restart: unless-stopped
+
+  web:
+    # The portal reaches Authentik through the sso.shesa.local network alias.
+    depends_on:
+      authentik-server:
+        condition: service_started
+
+volumes:
+  authentik_db:
+  authentik_media:
+  authentik_certs:

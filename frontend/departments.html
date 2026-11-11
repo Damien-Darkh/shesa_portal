@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Departments - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<!-- DISABLED: no nav link points here. To enable, uncomment the 'departments'
+     entries in layout.js (NAV_ITEMS and PAGE_TO_NAV). ?id=N shows one department. -->
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section">
+      <a href="departments.html" id="back" class="btn btn-outline" style="margin-bottom:1rem;" hidden>
+        <i data-lucide="arrow-left"></i> All departments
+      </a>
+      <p class="subtitle">Organization</p>
+      <h1 class="title" id="dept-title">Departments</h1>
+    </div>
+    <div class="grid-2" id="dept-grid"></div>
+  </main>
+
+  <script type="module" src="./pages/departments.js"></script>
+</body>
+</html>

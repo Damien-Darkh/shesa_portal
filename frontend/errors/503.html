@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <title>503 - Employee Portal</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/components.css">
+  <script src="/vendor/lucide.min.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-container">
+      <div class="header-brand">
+        <a class="brand-logo-img" href="/login"><img src="/logo_full.svg" alt="Company Logo"></a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <div class="error-page">
+      <div class="icon-box" style="background:#fffbeb;color:#b45309;">
+        <i data-lucide="cloud-off"></i>
+      </div>
+      <p class="code">503 &middot; Service unavailable</p>
+      <h1 class="title" style="font-size:1.75rem;">Sign-in is temporarily unavailable</h1>
+      <p class="description">We couldn't reach the sign-in service. Try again in a few minutes. If it keeps happening, contact IT and quote the reference below.</p>
+      <p class="form-hint">Reference: <span class="mono" data-no-i18n>{{reference}}</span></p>
+      <div class="btn-row" style="justify-content:center;margin-top:1rem;">
+        <button type="button" class="btn btn-outline" data-action="reload" style="margin-top:0;width:auto;"><i data-lucide="refresh-cw"></i> Try again</button>
+        <a class="btn btn-primary" href="/login" style="margin-top:0;width:auto;"><i data-lucide="log-in"></i> Back to sign-in</a>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/pages/error.js"></script>
+</body>
+</html>

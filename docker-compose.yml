@@ -1,29 +1,47 @@
+# root/docker-compose.yml
+# Backend only. The IdP (Authentik) runs separately, or add it here later.
 services:
-  app:
-    environment:
-      - PYTHONUNBUFFERED=1
-      - DATABASE_PATH=/app/data/portal.db
-    build: .
-    restart: unless-stopped
-    env_file:
-      - .env
-    volumes:
-      - app_data:/app/data
+  postgres:
+    image: postgres:17-alpine
     ports:
-      - "127.0.0.1:8081:5000"
+      - "5432:5432"
+    container_name: shesa-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-shesa_portal}
+      POSTGRES_USER: ${DB_USER:-shesa}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - portal_network
-    dns:
-      - 192.168.11.254
-      - 8.8.8.8 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-shesa} -d ${DB_NAME:-shesa_portal}"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    build: .
+    container_name: shesa-web
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    command: >
+      sh -c "python manage.py init_db &&
+             gunicorn -c gunicorn.conf.py config.wsgi:application"
+    networks:
+      - portal_network
+    restart: unless-stopped
+
 volumes:
-  app_data:
+  postgres_data:
 
 networks:
   portal_network:
-    name: portal_default
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1

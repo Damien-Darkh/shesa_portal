@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Directory & Onboarding - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section">
+      <p class="subtitle">Organization</p>
+      <h1 class="title">Directory & Onboarding</h1>
+    </div>
+
+    <!-- Search Bar -->
+    <section class="card">
+      <div class="form-group">
+        <span class="form-label">Find people</span>
+        <div class="search-bar"><i data-lucide="search"></i><input type="search" id="search-input" class="form-input" placeholder="Search by name, email, or job title…" aria-label="Search the directory"></div>
+        <select id="dept-filter" class="form-input" style="margin-top:.75rem;" aria-label="Filter by department"><option value="">All departments</option></select>
+      </div>
+    </section>
+
+    <!-- Directory List -->
+    <section class="card">
+      <div class="card-header"><h3 class="card-title">Employee Directory</h3></div>
+      <div class="grid-2" id="directory-grid"></div>
+    </section>
+
+    <!-- Onboarding Checklist -->
+<!--
+    <section class="card">
+      <div class="card-header">
+        <h3 class="card-title">Interactive Onboarding Checklist</h3>
+        <p class="card-subtitle">Sign-offs automatically route to the HR group.</p>
+      </div>
+      <div class="space-y" id="onboarding-list"></div>
+    </section>
+-->
+  </main>
+
+  <script type="module" src="./pages/directory.js"></script>
+</body>
+</html>

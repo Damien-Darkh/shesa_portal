@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Department - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <a href="admin.html#departments" id="dp-back" class="btn btn-outline" style="width:fit-content;"><i data-lucide="arrow-left"></i> Back to departments</a>
+    <p class="card-subtitle" id="dp-missing" hidden>Department not found.</p>
+
+    <div id="dp-content" class="space-y" hidden>
+      <div class="row-between" style="align-items:flex-start;">
+        <div style="min-width:0;">
+          <p class="subtitle" id="dp-crumb" data-no-i18n></p>
+          <h1 class="title" id="dp-name" style="font-size:1.75rem;" data-no-i18n></h1>
+          <p class="description" id="dp-desc" data-no-i18n></p>
+        </div>
+        <div class="btn-row">
+          <button type="button" class="btn btn-outline" id="dp-edit"><i data-lucide="pencil"></i> Edit</button>
+          <button type="button" class="btn btn-red" id="dp-delete"><i data-lucide="trash-2"></i> Delete</button>
+        </div>
+      </div>
+
+      <section class="card">
+        <div class="grid-2" id="dp-summary"></div>
+      </section>
+
+      <section class="card space-y">
+        <div class="card-header" style="margin-bottom:0;">
+          <h3 class="card-title">Members</h3>
+          <p class="card-subtitle">Direct members of this department.</p>
+        </div>
+        <div class="grid-2" id="dp-members"></div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./pages/admin_department.js"></script>
+</body>
+</html>

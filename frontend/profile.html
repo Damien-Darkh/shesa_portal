@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>My Profile - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section">
+      <p class="subtitle">Account</p>
+      <h1 class="title">My Profile</h1>
+      <p class="description">Your details are managed by an administrator. You can change your NAS password below.</p>
+    </div>
+
+    <form id="profile-form" class="card space-y">
+      <div class="card-header"><h3 class="card-title">Personal details</h3></div>
+
+      <div class="form-group">
+        <label class="form-label" for="p-email">Email</label>
+        <input type="email" id="p-email" class="form-input" disabled
+               style="background:#f8fafc;color:var(--text-muted);cursor:not-allowed;">
+        <span class="form-hint">Contact an admin if any of these details need to change.</span>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="p-firstname">First name</label>
+          <input type="text" id="p-firstname" class="form-input" placeholder="Jane">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="p-lastname">Last name</label>
+          <input type="text" id="p-lastname" class="form-input" placeholder="Doe">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label" for="p-job">Job title</label><input type="text" id="p-job" class="form-input"></div>
+        <div class="form-group"><label class="form-label" for="p-phone">Phone</label><input type="tel" id="p-phone" class="form-input"></div>
+      </div>
+      <div class="form-group"><label class="form-label" for="p-office">Office location</label><input type="text" id="p-office" class="form-input"></div>
+      <div class="callout callout--info"><i data-lucide="info"></i><div>Profile fields can only be edited by an administrator in the admin panel.</div></div>
+      <!-- Self-edit disabled. To re-enable: remove the disabled loop in the script and restore the save button:
+      <button class="btn btn-primary" type="submit" style="width:auto;">Save changes</button> -->
+    </form>
+
+    <section class="card space-y" id="language-section">
+      <div class="card-header">
+        <h3 class="card-title">Interface language</h3>
+        <p class="card-subtitle">Choose the language used across the portal. Italian is the default.</p>
+      </div>
+      <div class="form-group form-narrow">
+        <label class="form-label" for="lang-select">Language</label>
+        <select id="lang-select" class="form-input"><option value="it">Italiano</option><option value="en">English</option></select>
+      </div>
+    </section>
+
+    <section class="card space-y" id="nas-section" hidden>
+      <div class="card-header">
+        <h3 class="card-title">NAS password</h3>
+        <p class="card-subtitle">Your username for the company file server is
+          <strong class="mono" id="nas-username">--</strong>.</p>
+      </div>
+      <a href="change_dsm_password.html" class="btn btn-outline" style="margin-top:0;width:auto;">
+        <i data-lucide="key-round"></i> Change NAS password
+      </a>
+    </section>
+
+    <section class="card" id="no-nas-section" hidden>
+      <p class="card-subtitle">NAS account management isn't enabled for your user.</p>
+    </section>
+  </main>
+
+  <script type="module" src="./pages/profile.js"></script>
+</body>
+</html>

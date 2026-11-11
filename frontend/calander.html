@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Leave Calendar - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/fullcalendar.min.js"></script>
+  <script src="./vendor/fullcalendar-it.min.js"></script>
+  <script src="./vendor/lucide.min.js"></script>
+  <style>
+    .fc { --fc-border-color: var(--border-color); --fc-today-bg-color: var(--accent-light); --fc-button-bg-color: #fff; --fc-button-text-color: #1e293b; --fc-button-border-color: #cbd5e1; --fc-button-hover-bg-color: #f8fafc; --fc-button-hover-border-color: #94a3b8; --fc-button-active-bg-color: var(--primary); --fc-button-active-border-color: var(--primary); --fc-button-active-text-color: #fff; font-family: inherit; }
+    .fc .fc-toolbar-title { font-size: 1.15rem; font-weight: 700; }
+    .fc .fc-toolbar-chunk { display: flex; align-items: center; gap: .5rem; }
+    .fc .fc-button-group { gap: .5rem; }
+    .fc .fc-button-group > .fc-button { margin-left: 0 !important; }
+    .fc .fc-button { border-radius: .6rem !important; font-size: .8125rem; font-weight: 600; box-shadow: none !important; }
+    .fc-event { border-radius: .375rem !important; padding: 1px 5px; font-size: .78rem; cursor: default; }
+    .fc-event.fc-pending { opacity: .75; border: 1.5px dashed rgba(0,0,0,.5) !important; }
+    @media (max-width: 639px) { .fc .fc-toolbar { flex-direction: column; gap: .6rem; } }
+  </style>
+</head>
+<body>
+<!-- Leave is disabled for now: no nav link points here. To enable, uncomment the 'calendar' entries in layout.js
+     (NAV_ITEMS + PAGE_TO_NAV). Data: /api/pto/calendar/, /api/pto/requests/*. -->
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section row-between">
+      <div>
+        <p class="subtitle">Time Off</p>
+        <h1 class="title">Leave Calendar</h1>
+        <p class="description">Request leave or see when your colleagues are away.</p>
+      </div>
+      <button type="button" id="open-request" class="btn btn-primary" style="margin-top:0;"><i data-lucide="plus"></i> Request Leave</button>
+    </div>
+
+    <section class="card space-y">
+      <div class="legend" id="legend"></div>
+      <div id="calendar"></div>
+    </section>
+
+    <section class="card space-y">
+      <div class="card-header" style="margin-bottom:0;"><h3 class="card-title">My requests</h3></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Type</th><th>Dates</th><th>Days</th><th>Status</th><th></th></tr></thead>
+          <tbody id="my-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="leave-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lm-title">
+    <div class="modal-card">
+      <h3 class="modal-title" id="lm-title">Request leave</h3>
+      <p class="modal-description">Choose the dates and type of leave.</p>
+      <form id="leave-form" class="space-y" style="margin-top:1.25rem;" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="l-type">Leave type</label>
+          <select id="l-type" class="form-input"><option value="vacation">Vacation</option><option value="sick">Sick</option><option value="personal">Personal</option></select>
+        </div>
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label" for="l-start">Start date</label><input type="date" id="l-start" class="form-input" required></div>
+          <div class="form-group"><label class="form-label" for="l-end">End date</label><input type="date" id="l-end" class="form-input" required></div>
+        </div>
+        <div class="form-group"><label class="form-label" for="l-notes">Notes (optional)</label><textarea id="l-notes" rows="2" class="form-input" maxlength="300"></textarea></div>
+        <p class="error-text" id="l-error" role="alert" hidden></p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="l-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="margin-top:0;">Submit request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="./pages/calander.js"></script>
+</body>
+</html>

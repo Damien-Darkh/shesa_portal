@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <meta http-equiv="refresh" content="0;url={{location}}">
+  <title>Moved permanently - Employee Portal</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/components.css">
+  <script src="/vendor/lucide.min.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-container">
+      <div class="header-brand">
+        <a class="brand-logo-img" href="/index.html"><img src="/logo_full.svg" alt="Company Logo"></a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <div class="error-page">
+      <div class="icon-box" style="background:#e6f5fc;color:#005f94;">
+        <i data-lucide="arrow-right-circle"></i>
+      </div>
+      <p class="code">301 &middot; Moved permanently</p>
+      <h1 class="title" style="font-size:1.75rem;">This page has moved</h1>
+      <p class="description">You are being redirected to the secure address of this page.</p>
+      <div class="btn-row" style="justify-content:center;margin-top:1rem;">
+        <a class="btn btn-primary" href="{{location}}" style="margin-top:0;width:auto;"><i data-lucide="arrow-right"></i> Continue</a>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/pages/error.js"></script>
+</body>
+</html>

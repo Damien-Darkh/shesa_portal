@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Admin Panel - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/fullcalendar.min.js"></script>
+  <script src="./vendor/fullcalendar-it.min.js"></script>
+  <script src="./vendor/lucide.min.js"></script>
+  <style>
+    .fc { --fc-border-color: var(--border-color); --fc-today-bg-color: var(--accent-light); --fc-button-bg-color: #fff; --fc-button-text-color: #1e293b; --fc-button-border-color: #cbd5e1; --fc-button-hover-bg-color: #f8fafc; --fc-button-hover-border-color: #94a3b8; --fc-button-active-bg-color: var(--primary); --fc-button-active-border-color: var(--primary); --fc-button-active-text-color: #fff; font-family: inherit; }
+    .fc .fc-toolbar-title { font-size: 1.15rem; font-weight: 700; }
+    .fc .fc-button { border-radius: .6rem !important; font-size: .8125rem; font-weight: 600; box-shadow: none !important; }
+    .fc .fc-toolbar-chunk { display: flex; align-items: center; gap: .5rem; }
+    .fc .fc-button-group { gap: .5rem; }
+    .fc .fc-button-group > .fc-button { margin-left: 0 !important; }
+    .fc-event { border-radius: .375rem !important; padding: 1px 5px; font-size: .78rem; cursor: pointer; }
+    .fc-event.fc-pending { opacity: .7; border: 1.5px dashed rgba(0,0,0,.5) !important; }
+    @media (max-width: 639px) { .fc .fc-toolbar { flex-direction: column; gap: .6rem; } }
+    .cal-controls { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; }
+    .cal-controls .form-input { width: auto; min-width: 12rem; }
+  </style>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section row-between">
+      <div>
+        <p class="subtitle">Administration</p>
+        <h1 class="title">Admin Panel</h1>
+        <p class="description">Manage employees, review time off and see who is away.</p>
+      </div>
+      <a href="add_user.html" class="btn btn-primary" style="margin-top:0;"><i data-lucide="plus"></i> Add Employee</a>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Admin sections" id="admin-tabs">
+      <button type="button" class="tab" role="tab" id="tab-employees" aria-controls="panel-employees" data-tab="employees"><i data-lucide="users"></i> Employees</button>
+      <button type="button" class="tab" role="tab" id="tab-leave" aria-controls="panel-leave" data-tab="leave"><i data-lucide="clipboard-check"></i> Leave approvals <span class="badge js-leave-badge" hidden></span></button>
+      <button type="button" class="tab" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar"><i data-lucide="calendar-days"></i> Leave calendar</button>
+      <button type="button" class="tab" role="tab" id="tab-departments" aria-controls="panel-departments" data-tab="departments"><i data-lucide="building-2"></i> Departments</button>
+    </div>
+
+    <!-- Employees -->
+    <section class="card" id="panel-employees" role="tabpanel" aria-labelledby="tab-employees" hidden>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Devices</th><th>Status</th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Leave approvals -->
+    <section class="card space-y" id="panel-leave" role="tabpanel" aria-labelledby="tab-leave" hidden>
+      <div class="row-between" style="align-items:center;">
+        <p class="card-subtitle" style="margin:0;">You can't approve your own request; another admin has to.</p>
+        <div class="btn-row">
+          <button type="button" class="btn btn-sm btn-primary" style="margin-top:0;width:auto;" data-filter="pending">Pending</button>
+          <button type="button" class="btn btn-sm btn-outline" data-filter="all">All requests</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+          <tbody id="leave-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Leave calendar -->
+    <section class="card space-y" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar" hidden>
+      <div class="cal-controls">
+        <select id="cal-employee" class="form-input" aria-label="Filter by employee"><option value="">All employees</option></select>
+        <label class="checkbox-row" style="margin:0;"><input type="checkbox" id="cal-pending" checked> Show pending requests</label>
+      </div>
+      <div class="legend" id="cal-legend"></div>
+      <div id="calendar"></div>
+    </section>
+
+    <!-- Departments -->
+    <section class="card space-y" id="panel-departments" role="tabpanel" aria-labelledby="tab-departments" hidden>
+      <div class="row-between" style="align-items:center;">
+        <p class="card-subtitle" style="margin:0;">Departments group employees and can be nested under a parent department.</p>
+        <button type="button" id="d-add" class="btn btn-primary btn-sm" style="margin-top:0;width:auto;"><i data-lucide="plus"></i> Add department</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Name</th><th>Description</th><th>Parent department</th><th>Manager</th><th title="Includes employees in sub-departments">Members</th></tr></thead>
+          <tbody id="dept-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Leave details pop-up -->
+  <div id="leave-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lm-title">
+    <div class="modal-card">
+      <div class="row-between" style="align-items:flex-start;flex-wrap:nowrap;">
+        <div style="min-width:0;">
+          <h3 class="modal-title" id="lm-title"></h3>
+          <p class="modal-description" id="lm-sub" style="margin-top:.25rem;"></p>
+        </div>
+        <span id="lm-status" style="flex-shrink:0;"></span>
+      </div>
+      <div class="space-y" id="lm-body" style="margin-top:1.25rem;"></div>
+      <div class="modal-actions"><button type="button" class="btn btn-outline" id="lm-close">Close</button></div>
+    </div>
+  </div>
+
+  <script type="module" src="./pages/admin.js"></script>
+</body>
+</html>
