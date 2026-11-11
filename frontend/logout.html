@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Sign in - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+  <!-- Sign-in page: no navigation, because nobody is signed in yet. -->
+  <header class="header">
+    <div class="header-container">
+      <div class="header-brand">
+        <a class="brand-logo-img" href="/login"><img src="./logo_full.svg" alt="Company Logo"></a>
+      </div>
+      <div class="btn-row">
+        <label class="sr-only" for="lang-select">Language</label>
+        <select id="lang-select" class="form-input" style="width:auto;padding:.4rem .6rem;">
+          <option value="it">Italiano</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container space-y" style="max-width:28rem;margin:0 auto;">
+    <div class="page-title-section" style="margin-bottom:0;text-align:center;">
+      <p class="subtitle">Employee Portal</p>
+      <h1 class="title" style="font-size:1.75rem;">Sign in</h1>
+    </div>
+
+    <div id="notice" role="alert" hidden class="callout callout--danger"><i data-lucide="triangle-alert"></i><div id="notice-text"></div></div>
+    <div id="info" role="status" hidden class="callout callout--info"><i data-lucide="info"></i><div id="info-text"></div></div>
+
+    <section class="card space-y" style="text-align:center;">
+      <p class="description" style="margin:0;">Use your company account. Multi-factor sign-in is handled by the sign-in service.</p>
+
+      <a id="sso-btn" class="btn btn-primary" href="/accounts/oidc/authentik/login/" style="margin-top:.5rem;width:100%;justify-content:center;" aria-disabled="false">
+        <i data-lucide="log-in"></i> <span id="sso-label">Sign in with company account</span>
+      </a>
+      <p id="sso-unavailable" class="form-hint" hidden>Sign-in is temporarily unavailable. Contact IT.</p>
+    </section>
+
+    <p class="form-hint" style="text-align:center;">Problems signing in? Contact IT.</p>
+  </main>
+
+  <script type="module" src="./pages/login.js"></script>
+</body>
+</html>

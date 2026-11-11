@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Colleague - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="row-between" style="align-items:center;">
+      <a href="directory.html" id="p-back" class="btn btn-outline" style="width:fit-content;"><i data-lucide="arrow-left"></i> Back to directory</a>
+      <div class="btn-row" id="adm-actions" hidden>
+        <a class="btn btn-outline" id="a-edit" href="#"><i data-lucide="pencil"></i> Edit employee</a>
+        <button type="button" class="btn btn-outline" id="a-nas" hidden><i data-lucide="key"></i> Reset NAS password</button>
+        <button type="button" class="btn btn-outline" id="a-authentik" hidden><i data-lucide="key"></i> Reset Authentik password</button>
+      </div>
+    </div>
+    <p class="card-subtitle" id="p-missing" hidden>Employee not found.</p>
+
+    <div id="p-content" class="space-y" hidden>
+      <section class="card profile-card">
+        <div class="profile-card-content">
+          <div class="avatar-container"><div class="avatar-box" id="p-avatar"></div></div>
+          <div class="profile-info">
+            <p class="section-badge">Colleague</p>
+            <h1 class="profile-name" id="p-name" data-no-i18n></h1>
+            <p class="profile-subtext" id="p-job" data-no-i18n></p>
+            <div class="btn-row" id="p-pills" style="margin-top:.75rem;justify-content:center;gap:.4rem;" hidden></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h3 class="card-title">Personal Details</h3></div>
+        <div class="grid-2">
+          <div class="detail-item"><i data-lucide="mail" class="icon"></i><div><p class="label">Email</p><p class="value"><a id="p-email" data-no-i18n></a></p></div></div>
+          <div class="detail-item"><i data-lucide="phone" class="icon"></i><div><p class="label">Phone</p><p class="value"><a id="p-phone" data-no-i18n></a></p></div></div>
+          <div class="detail-item"><i data-lucide="building-2" class="icon"></i><div><p class="label">Department</p><p class="value" id="p-dept" data-no-i18n></p></div></div>
+          <div class="detail-item"><i data-lucide="map-pin" class="icon"></i><div><p class="label">Office Location</p><p class="value" id="p-office" data-no-i18n></p></div></div>
+          <div class="detail-item" id="p-start-wrap" hidden><i data-lucide="calendar" class="icon"></i><div><p class="label">Start Date</p><p class="value" id="p-start"></p></div></div>
+        </div>
+        <div class="bio-section" id="p-bio-wrap" hidden><p class="label">About</p><p class="bio-text" id="p-bio" data-no-i18n></p></div>
+      </section>
+
+      <!-- Administrators only: everything the system knows about this employee -->
+      <div id="adm" class="space-y" hidden>
+        <section class="card space-y">
+          <div class="card-header" style="margin-bottom:0;"><h3 class="card-title">Account details</h3><p class="card-subtitle">Only visible to administrators</p></div>
+          <div class="grid-2" id="adm-account"></div>
+        </section>
+        <section class="card space-y">
+          <div class="card-header" style="margin-bottom:0;"><h3 class="card-title">Organization chart</h3></div>
+          <div class="grid-2" id="adm-org"></div>
+        </section>
+        <section class="card space-y">
+          <div class="card-header" style="margin-bottom:0;"><h3 class="card-title">Devices</h3></div>
+          <div class="table-wrap"><table class="data">
+            <thead><tr><th>Device</th><th>Address</th><th>Added</th><th>Status</th></tr></thead>
+            <tbody id="adm-devices"></tbody></table></div>
+        </section>
+        <section class="card space-y">
+          <div class="card-header" style="margin-bottom:0;"><h3 class="card-title">Leave history</h3></div>
+          <div id="adm-balances" hidden>
+            <p class="label" style="margin-bottom:.5rem;">Leave balances</p>
+            <div class="table-wrap"><table class="data">
+              <thead><tr><th>Type</th><th>Accrued</th><th>Carryover</th><th>Used</th><th>Pending</th><th>Remaining</th></tr></thead>
+              <tbody id="adm-bal-body"></tbody></table></div>
+          </div>
+          <div class="table-wrap"><table class="data">
+            <thead><tr><th>Type</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th></tr></thead>
+            <tbody id="adm-leave"></tbody></table></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="./pages/person.js"></script>
+</body>
+</html>

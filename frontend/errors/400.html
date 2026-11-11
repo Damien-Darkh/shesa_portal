@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <title>400 - Employee Portal</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/components.css">
+  <script src="/vendor/lucide.min.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-container">
+      <div class="header-brand">
+        <a class="brand-logo-img" href="/index.html"><img src="/logo_full.svg" alt="Company Logo"></a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <div class="error-page">
+      <div class="icon-box" style="background:#fffbeb;color:#b45309;">
+        <i data-lucide="circle-alert"></i>
+      </div>
+      <p class="code">400 &middot; Bad request</p>
+      <h1 class="title" style="font-size:1.75rem;">Bad request</h1>
+      <p class="description">The request was incomplete or could not be read. Go back and check the information you entered, then try again.</p>
+
+      <div class="btn-row" style="justify-content:center;margin-top:1rem;">
+        <button type="button" class="btn btn-outline" data-action="back" style="margin-top:0;width:auto;"><i data-lucide="arrow-left"></i> Go back</button>
+        <a class="btn btn-primary" href="/index.html" style="margin-top:0;width:auto;"><i data-lucide="layout-dashboard"></i> Back to dashboard</a>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/pages/error.js"></script>
+</body>
+</html>

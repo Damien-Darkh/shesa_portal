@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Employee Created - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+  <main class="main-container space-y">
+    <div class="page-title-section">
+      <p class="subtitle">Administration</p>
+      <h1 class="title">Employee Created</h1>
+      <p class="description" id="created-subtext">Account provisions successfully generated.</p>
+    </div>
+
+    <div class="card card-error" style="border-color: #fca5a5; background-color: #fef2f2; color: #991b1b;">
+      <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+        <i data-lucide="lock" style="flex-shrink:0; margin-top:0.125rem;"></i>
+        <div>
+          <strong>This temporary credential is shown only once.</strong> Copy or record these details immediately before leaving this page.
+        </div>
+      </div>
+    </div>
+
+    <section class="card space-y">
+      <div class="detail-item" style="justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <span class="label">DSM Username</span>
+        <span id="dsm-user" class="value" style="font-family: monospace;">--</span>
+      </div>
+      <div class="detail-item" style="justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <span class="label">Temporary Password</span>
+        <span id="temp-pw" class="value" style="font-family: monospace; font-weight: 700; color: var(--primary);">--</span>
+      </div>
+
+      <div style="padding-top: 0.5rem;">
+        <button type="button" id="copy-pw-btn" class="btn btn-outline">
+          <i data-lucide="copy"></i> <span id="copy-pw-text">Copy Temporary Password</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="card space-y" id="authentik-section" hidden>
+      <div class="detail-item" style="justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <span class="label">Authentik Username</span>
+        <span id="authentik-user" class="value" style="font-family: monospace;">--</span>
+      </div>
+      <div class="detail-item" style="justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+        <span class="label">Authentik Temporary Password</span>
+        <span id="authentik-temp-pw" class="value" style="font-family: monospace; font-weight: 700; color: var(--primary);">--</span>
+      </div>
+
+      <div style="padding-top: 0.5rem;">
+        <button type="button" id="copy-authentik-pw-btn" class="btn btn-outline">
+          <i data-lucide="copy"></i> <span id="copy-authentik-pw-text">Copy Authentik Password</span>
+        </button>
+      </div>
+    </section>
+
+    <div>
+      <a href="admin.html" class="btn btn-primary" style="margin-top:0;">Back to Employee List</a>
+    </div>
+  </main>
+
+  <script type="module" src="./pages/admin_user_created.js"></script>
+</body>
+</html>

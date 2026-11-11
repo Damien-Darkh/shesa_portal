@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Edit employee - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div>
+      <a href="admin.html" id="eu-back" class="btn btn-outline" style="margin-bottom:1rem;"><i data-lucide="arrow-left"></i> Back to employees</a>
+      <div class="row-between" style="align-items:center;">
+        <div>
+          <p class="subtitle">Edit employee</p>
+          <h1 class="title" id="eu-name" style="font-size:1.75rem;" data-no-i18n>--</h1>
+          <p class="description" id="eu-email" data-no-i18n></p>
+        </div>
+        <span id="eu-status"></span>
+      </div>
+    </div>
+    <p class="card-subtitle" id="eu-missing" hidden>Employee not found.</p>
+
+    <div id="eu-content" class="space-y" hidden>
+      <!-- Profile: only admins can edit these fields (employees see them read-only on their profile) -->
+      <form id="profile-form" class="card space-y">
+        <div class="card-header"><h3 class="card-title">Personal details</h3></div>
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label" for="f-first">First name</label><input type="text" id="f-first" class="form-input" required></div>
+          <div class="form-group"><label class="form-label" for="f-last">Last name</label><input type="text" id="f-last" class="form-input" required></div>
+        </div>
+        <div class="form-group"><label class="form-label" for="f-email">Email address</label><input type="email" id="f-email" class="form-input" required></div>
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label" for="f-job">Job title</label><input type="text" id="f-job" class="form-input" required></div>
+          <div class="form-group"><label class="form-label" for="f-dept">Department</label><select id="f-dept" class="form-input" required></select></div>
+          <div class="form-group"><label class="form-label" for="f-phone">Phone</label><input type="tel" id="f-phone" class="form-input" required></div>
+          <div class="form-group"><label class="form-label" for="f-office">Office location</label><input type="text" id="f-office" class="form-input"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="f-photo">Avatar photo URL</label>
+          <div class="avatar-container" style="margin-bottom:.75rem;"><div class="avatar-box" id="avatar-preview-box"><span>--</span></div></div>
+          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="f-photo" class="form-input" placeholder="./images/avatar.jpg" style="flex:1;min-width:12rem;">
+            <input type="file" id="f-photo-file" accept="image/*" hidden>
+            <button type="button" id="f-browse" class="btn btn-outline" style="white-space:nowrap;"><i data-lucide="folder-open"></i> Browse...</button>
+            <button type="button" id="f-remove" class="btn btn-outline" style="white-space:nowrap;"><i data-lucide="x"></i> Remove photo</button>
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label" for="f-bio">Bio</label><textarea id="f-bio" rows="3" class="form-input" maxlength="500"></textarea></div>
+        <p class="error-text" id="profile-error" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit" style="margin-top:0;width:auto;">Save profile</button>
+      </form>
+
+      <!-- Access -->
+      <section class="card space-y" id="access-card">
+        <div class="card-header"><h3 class="card-title">Access</h3></div>
+        <form id="access-form" class="space-y">
+          <label class="checkbox-row"><input type="checkbox" id="f-admin"> Administrator (can manage employees, devices and leave)</label>
+          <label class="checkbox-row"><input type="checkbox" id="f-disabled"> Disabled: revokes all their devices immediately on save</label>
+          <button class="btn btn-outline" type="submit">Save access</button>
+        </form>
+      </section>
+      <p class="card-subtitle" id="self-note" hidden>You can't change your own admin or disabled status, or delete your own account.</p>
+
+      <!-- NAS -->
+      <section class="card space-y" id="nas-card" hidden>
+        <div class="card-header"><h3 class="card-title">NAS account</h3><p class="card-subtitle">NAS username: <strong class="mono" id="nas-user" data-no-i18n></strong></p></div>
+        <a class="btn btn-outline" id="nas-reset" href="#"><i data-lucide="key"></i> Reset NAS password</a>
+      </section>
+
+      <!-- Devices -->
+      <section class="card space-y">
+        <div class="card-header"><h3 class="card-title">Devices</h3></div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Device</th><th>Address</th><th>Added</th><th>Status</th><th></th></tr></thead>
+            <tbody id="dev-tbody"></tbody>
+          </table>
+        </div>
+        <form id="dev-form" class="form-card" style="margin-top:.5rem;">
+          <div class="form-group"><label class="form-label" for="dev-name">Add a device for this employee</label><input type="text" id="dev-name" class="form-input" placeholder="iPhone" required></div>
+          <button class="btn btn-outline" type="submit"><i data-lucide="plus"></i> Create VPN access</button>
+        </form>
+      </section>
+
+      <!-- Danger zone -->
+      <section class="card danger-zone space-y" id="danger-card">
+        <div class="card-header"><h3 class="card-title" style="display:flex;align-items:center;gap:.5rem;"><i data-lucide="triangle-alert"></i> Danger zone</h3>
+          <p class="card-subtitle">Permanently deletes this employee, removes every device and their NAS account. Use Disabled above to suspend access temporarily.</p></div>
+        <button type="button" class="btn btn-red" id="delete-btn"><i data-lucide="trash-2"></i> Delete employee</button>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./pages/edit_user.js"></script>
+</body>
+</html>

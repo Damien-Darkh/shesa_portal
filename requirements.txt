@@ -1,0 +1,13 @@
+Django==6.1.2
+psycopg[binary]>=3.2,<4
+django-allauth>=65.0,<66
+PyJWT>=2.8,<3
+python-dotenv>=1.0
+requests>=2.31
+cryptography>=42.0
+qrcode[pil]>=7.4
+Pillow>=10.0
+ReportLab>=4.0
+pypdf>=5.0
+gunicorn>=23.0
+whitenoise>=6.7

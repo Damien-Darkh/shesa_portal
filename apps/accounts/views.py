@@ -1,0 +1,139 @@
+"""Sign-in/out and the signed-in user's own profile and NAS password."""
+from urllib.parse import urlencode
+
+from django.conf import settings
+from django.views.decorators.cache import never_cache
+from django.contrib.auth import logout as auth_logout
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
+
+from apps.common.audit import record
+from apps.common.http import api_login_required, error, ok, read_json
+from apps.common.integrations import synology_manager
+from apps.core.services import profile_dict
+
+LANGUAGES = ("it", "en")
+
+
+def _safe_next(value: str | None) -> str | None:
+    """Only same-site relative paths may be used after sign-in (blocks open redirects)."""
+    if value and value.startswith("/") and not value.startswith("//") and "\\" not in value:
+        return value
+    return None
+
+
+def sso_login_url(next_url: str | None = None) -> str:
+    url = reverse("openid_connect_login", kwargs={"provider_id": settings.OIDC_PROVIDER_ID})
+    return f"{url}?{urlencode({'next': next_url})}" if next_url else url
+
+
+@never_cache
+def login_view(request):
+    """Sign-in starts at Authentik: anonymous visitors are sent there directly, signed-in users go to the dashboard."""
+    if not settings.USE_SSO or request.user.is_authenticated:
+        return HttpResponseRedirect("/index.html")
+    return HttpResponseRedirect(sso_login_url(_safe_next(request.GET.get("next"))))
+
+
+@require_GET
+def auth_config(request):
+    """Public. What the login page needs: where the sign-in starts and how the provider is named."""
+    next_url = _safe_next(request.GET.get("next"))
+    return ok({
+        "sso_url": sso_login_url(next_url),
+        "provider_name": settings.OIDC_PROVIDER_NAME,
+        "sso_enabled": settings.USE_SSO,
+    })
+
+
+def sso_logout_url(post_logout_redirect: str) -> str:
+    """Authentik's end-session endpoint. Ends the Authentik session as well, so the next
+    sign-in actually shows the login form instead of silently re-logging the user in."""
+    base = settings.OIDC_SERVER_URL.rstrip("/")
+    return f"{base}/end-session/?{urlencode({'post_logout_redirect_uri': post_logout_redirect, 'client_id': settings.OIDC_CLIENT_ID})}"
+
+
+@require_http_methods(["GET", "POST"])
+def logout_view(request):
+    """GET: used by the nav link (logs out of the portal and Authentik, then back to the logout page).
+    POST: JSON for scripts (portal session only)."""
+    if request.user.is_authenticated:
+        auth_logout(request)  # signal writes the LOGOUT audit row
+    if request.method == "GET":
+        landing = request.build_absolute_uri("/logout.html?signedout=1")
+        if settings.USE_SSO and settings.OIDC_SERVER_URL:
+            return HttpResponseRedirect(sso_logout_url(landing))
+        return HttpResponseRedirect("/logout.html?signedout=1")
+    return ok({"logged_out": True})
+
+
+def _serialize_me(user) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "full_name": user.full_name,
+        "is_admin": user.is_admin,
+        "disabled": user.disabled,
+        "language": user.language,
+        "roles": [r.name for r in user.roles.all()],
+        "dsm_username": user.dsm_username,
+        "dsm_must_change_password": bool(user.dsm_must_change_password),
+        "profile": profile_dict(user),
+    }
+
+
+@api_login_required
+@require_http_methods(["GET", "PATCH"])
+def me(request):
+    user = request.user
+    if request.method == "PATCH":
+        # Self-service is limited to the language. Names and profile are managed by admins.
+        try:
+            data = read_json(request)
+        except ValueError as exc:
+            return error(400, str(exc))
+        if "language" in data:
+            if data["language"] not in LANGUAGES:
+                return error(422, "Unsupported language.")
+            user.language = data["language"]
+            user.save(update_fields=["language"])
+            record(request, "UPDATE", "user", user.id, details={"language": user.language})
+    return ok(_serialize_me(user))
+
+
+@api_login_required
+@require_POST
+def change_dsm_password(request):
+    """Lets the signed-in user replace the temporary NAS password issued to them."""
+    user = request.user
+    if not settings.DSM_URL or not user.dsm_username:
+        return error(400, "NAS account management is disabled for your user.")
+    try:
+        data = read_json(request)
+    except ValueError as exc:
+        return error(400, str(exc))
+
+    new_password = (data.get("new_password") or "").strip()
+    if not new_password:
+        return error(400, "Password is required.")
+    if new_password != (data.get("confirm_password") or "").strip():
+        return error(400, "Passwords do not match.")
+
+    description = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    try:
+        synology_manager.update_password(user.dsm_username, new_password, description=description)
+    except synology_manager.PasswordPolicyError as exc:
+        return error(422, str(exc))
+    except synology_manager.DsmApiError as exc:
+        return error(502, f"Could not update NAS password: {exc}")
+
+    user.dsm_temp_password = None
+    user.dsm_password_token = None
+    user.dsm_password_expires_at = None
+    user.dsm_must_change_password = False
+    user.save()
+    record(request, "UPDATE", "nas_password", user.id)
+    return ok({"updated": True})

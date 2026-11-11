@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Dashboard - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section" style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <div>
+        <p class="subtitle">Overview</p>
+        <h1 class="title" id="welcome-title">Welcome back</h1>
+      </div>
+<!--
+      <div style="display: flex; gap: 0.75rem;">
+        <button type="button" id="clock-toggle-btn" class="btn btn-primary">
+          <i data-lucide="clock"></i> <span id="clock-btn-text">Clock In</span>
+        </button>
+      </div>
+-->
+    </div>
+
+    <!-- Profile Overview Card -->
+    <section class="card profile-card">
+      <div class="profile-card-content">
+        <div class="avatar-container">
+          <div class="avatar-box"><span id="profile-initials">--</span></div>
+        </div>
+        <div class="profile-info">
+          <p class="section-badge" id="profile-role-badge">Roles</p>
+          <h2 class="profile-name" id="profile-fullname">--</h2>
+          <p class="profile-subtext" id="profile-job">--</p>
+          <div class="user-id-badge" id="profile-id">User ID: --</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Personal Details Section -->
+    <section class="card">
+      <div class="card-header">
+        <h3 class="card-title">Personal Details</h3>
+      </div>
+      <div class="grid-2">
+        <div class="detail-item"><i data-lucide="mail" class="icon"></i><div><p class="label">Email</p><p id="p-email" class="value">--</p></div></div>
+        <div class="detail-item"><i data-lucide="phone" class="icon"></i><div><p class="label">Phone</p><p id="p-phone" class="value">--</p></div></div>
+        <div class="detail-item"><i data-lucide="map-pin" class="icon"></i><div><p class="label">Office Location</p><p id="p-office" class="value">--</p></div></div>
+        <div class="detail-item"><i data-lucide="calendar" class="icon"></i><div><p class="label">Start Date</p><p id="p-start" class="value">--</p></div></div>
+      </div>
+      <div class="bio-section">
+        <p class="label">About</p>
+        <p id="p-bio" class="bio-text">--</p>
+      </div>
+    </section>
+
+
+    <!-- Live Time Tracker Panel -->
+<!--    
+    <section class="card">
+      <div class="password-info">
+        <div class="icon-box"><i data-lucide="timer"></i></div>
+        <div>
+          <h3 class="text-base font-semibold">Time & Attendance</h3>
+          <p class="card-subtitle" id="time-status-sub">Checking clock-in status…</p>
+        </div>
+      </div>
+    </section>
+-->
+    <!-- Leave Balances Grid -->
+<!--
+    <div class="grid-2" id="leave-balances-grid"></div>
+-->
+    <!-- Total Leaves Overview -->
+    <!-- LEAVES — disabled. Uncomment this block and the matching JS block below to enable.
+    <section class="card leave-card" id="total-leave-grid"></section>
+    -->
+
+    <!-- Quick Links & Tasks -->
+    <!-- grid-2 with 2 columns when leave is enabled; a single full-width Notifications card for now -->
+    <div>
+      <!-- PENDING LEAVE — disabled
+      <section class="card">
+        <div class="card-header"><h3 class="card-title">Pending Leave Requests</h3></div>
+        <div class="space-y" id="pending-leave-list"></div>
+      </section>
+      -->
+
+      <section class="card">
+        <div class="card-header">
+          <h3 class="card-title" id="notifications">Notifications <span class="badge" id="unread-count" hidden></span></h3>
+        </div>
+        <div class="space-y" id="notifications-list"></div>
+      </section>
+    </div>
+
+    <!-- Active VPN Devices -->
+    <section class="card space-y">
+      <div class="card-header row-between" style="margin-bottom:0;">
+        <h3 class="card-title">VPN Devices</h3>
+        <a href="add_device.html" class="btn btn-primary btn-sm" style="margin-top:0;width:auto;">
+          <i data-lucide="plus"></i> Add Device
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Device</th><th>Address</th><th>Added</th><th>Status</th><th></th></tr></thead>
+          <tbody id="devices-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./pages/index.js"></script>
+</body>
+</html>

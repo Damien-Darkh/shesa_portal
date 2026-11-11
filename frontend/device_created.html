@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <link rel="icon" type="image/svg+xml" href="./logo.svg">
+  <title>Set Up Device - Employee Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="components.css">
+  <script src="./vendor/lucide.min.js"></script>
+</head>
+<body>
+<header id="site-header"></header>
+
+  <main class="main-container space-y">
+    <div class="page-title-section">
+      <p class="subtitle">VPN Setup</p>
+      <h1 class="title" id="device-title">Set up Device</h1>
+    </div>
+
+    <div class="card card-error" style="border-color: #fca5a5; background-color: #fef2f2; color: #991b1b;">
+      <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+        <i data-lucide="lock" style="flex-shrink:0; margin-top:0.125rem;"></i>
+        <div>
+          <strong>This configuration is shown only once.</strong> Scan the QR code or copy the configuration text into your WireGuard application now.
+        </div>
+      </div>
+    </div>
+
+    <section class="card space-y">
+      <div>
+        <p class="section-badge">Step 1</p>
+        <p class="value">Install the WireGuard app on your device (iOS, Android, macOS, or Windows).</p>
+      </div>
+
+      <div style="border-top: 1px solid var(--border-color); padding-top: 1.25rem;">
+        <p class="section-badge">Step 2</p>
+        <p class="value">Scan this QR code from inside the WireGuard app ("Add Tunnel" &rarr; "Scan QR Code"):</p>
+        <div style="margin-top: 1rem; padding: 1rem; background: white; border: 1px solid var(--border-color); border-radius: 0.75rem; inline-size: fit-content;">
+          <!-- SVG WireGuard Mock Placeholder -->
+          <svg width="180" height="180" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="white"/>
+            <path d="M10 10h30v30H10zM18 18h14v14H18zM60 10h30v30H60zM68 18h14v14H68zM10 60h30v30H10zM18 68h14v14H18zM50 10h5v10h-5zM50 30h10v5h-10zM60 50h15v10H60zM80 50h10v20H80zM50 70h20v20H50zM75 75h15v15H75z" fill="#1a1a1a"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section class="card space-y">
+      <p class="label">Manual Configuration Text</p>
+      <div style="position: relative;">
+        <textarea id="wg-config" class="form-input readonly" rows="6" readonly style="font-family: monospace; font-size: 0.8rem;"></textarea>
+        <button type="button" id="copy-btn" class="btn btn-outline" style="position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.75rem;">
+          <i data-lucide="copy"></i> <span id="copy-text">Copy config</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="card card--info space-y" id="launcher-card" hidden>
+      <p class="section-badge">On a Windows work computer?</p>
+      <p class="value">One file installs WireGuard if needed, connects it, and adds a shortcut to the company NAS.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" id="launcher-btn" style="margin-top:0;" download="Connect Company Network.cmd"><i data-lucide="download"></i> Download Windows setup file</a>
+      </div>
+      <p class="form-hint">Works for one hour or until you run it. Windows may show a security prompt: choose "More info", then "Run anyway".</p>
+    </section>
+
+    <div>
+      <a href="index.html" class="btn btn-primary" style="margin-top:0;">Done, back to profile</a>
+    </div>
+  </main>
+
+  <script type="module" src="./pages/device_created.js"></script>
+</body>
+</html>
