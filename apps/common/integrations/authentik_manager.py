@@ -152,23 +152,39 @@ def reset_password(username: str) -> str:
     return password
 
 
-def _find_user_pk(username: str) -> str:
-    data = _request("GET", "/api/v3/core/users/", params={"username": username})
-    results = data.get("results") or []
-    if not results:
-        raise AuthentikApiError(f"No Authentik user named '{username}'.")
-    return results[0]["pk"]
+def find_accounts(username: str | None, email: str | None) -> list[dict]:
+    """Finds the Authentik account(s) belonging to a portal user.
+
+    Looks up the stored username first, then falls back to the email address,
+    so accounts created by SSO first-login (or before this integration) are
+    still found. Superusers are never returned, so the portal can't delete or
+    disable an admin account by accident."""
+    found = {}
+    if username:
+        data = _request("GET", "/api/v3/core/users/", params={"username": username})
+        for u in data.get("results") or []:
+            found[u["pk"]] = u
+    if not found and email:
+        data = _request("GET", "/api/v3/core/users/", params={"email": email})
+        for u in data.get("results") or []:
+            found[u["pk"]] = u
+    return [u for u in found.values() if not u.get("is_superuser")]
 
 
-def delete_user(username: str) -> None:
-    """Deletes an Authentik user by username. No-op (raises) if not found -
-    callers that want delete-if-exists semantics should catch AuthentikApiError."""
-    pk = _find_user_pk(username)
-    _request("DELETE", f"/api/v3/core/users/{pk}/")
+def delete_account(username: str | None, email: str | None) -> int:
+    """Deletes the Authentik account(s) for a portal user. Returns how many were
+    deleted (0 if none existed, which counts as already removed). Raises
+    AuthentikApiError if any deletion fails, so the caller can stop."""
+    accounts = find_accounts(username, email)
+    for acc in accounts:
+        _request("DELETE", f"/api/v3/core/users/{acc['pk']}/")
+    return len(accounts)
 
 
-def set_active(username: str, active: bool) -> None:
-    """Enables/disables sign-in for an Authentik user without deleting the
-    account - used when a portal admin disables/re-enables an employee."""
-    pk = _find_user_pk(username)
-    _request("PATCH", f"/api/v3/core/users/{pk}/", json={"is_active": active})
+def set_active(username: str | None, email: str | None, active: bool) -> int:
+    """Enables/disables sign-in for the Authentik account(s) of a portal user.
+    Returns how many accounts were updated (0 if none found)."""
+    accounts = find_accounts(username, email)
+    for acc in accounts:
+        _request("PATCH", f"/api/v3/core/users/{acc['pk']}/", json={"is_active": active})
+    return len(accounts)

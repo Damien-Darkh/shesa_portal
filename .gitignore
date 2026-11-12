@@ -1,9 +1,20 @@
+# Python
 __pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+venv/
 .env
-static/images.ai
-development.md
-README.md
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+
+# IDE
 .vscode/
 .idea/
-.venv/
-portal.db
+
+# Environment
+.DS_Store

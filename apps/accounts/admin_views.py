@@ -211,21 +211,24 @@ def user_detail(request, user_id):
             except wg_manager.WgApiError:
                 pass
             device.delete()
+        # Authentik is the sign-in gate, so remove it first and fail closed:
+        # if it can't be removed, keep the portal record so the admin can retry,
+        # instead of leaving an active sign-in behind.
+        if settings.AUTHENTIK_API_URL:
+            try:
+                removed = authentik_manager.delete_account(user.authentik_username, user.email)
+            except authentik_manager.AuthentikApiError as exc:
+                return error(502, f"The employee was not deleted because their Authentik sign-in could not be removed. Nothing was changed. Try again. Details: {exc}")
+        else:
+            removed = 0
         warnings = []
+        if not removed and settings.AUTHENTIK_API_URL:
+            warnings.append("No Authentik sign-in account was found for this employee.")
         if settings.DSM_URL and user.dsm_username:
             try:
                 synology_manager.delete_user(user.dsm_username)
             except synology_manager.DsmApiError as exc:
                 warnings.append(f"NAS account deletion failed: {exc}")
-        if settings.AUTHENTIK_API_URL and user.authentik_username:
-            try:
-                authentik_manager.delete_user(user.authentik_username)
-            except authentik_manager.AuthentikApiError as exc:
-                warnings.append(f"Authentik account deletion failed: {exc}")
-        elif not user.authentik_username:
-            # This user's Authentik account (if any) predates this integration,
-            # or was created directly in Authentik rather than by the portal.
-            warnings.append("No linked Authentik account on record; remove it there manually if one exists.")
         email, uid = user.email, user.id
         user.delete()
         record(request, "DELETE", "user", uid, details={"email": email})
@@ -289,9 +292,11 @@ def toggle_disabled(request, user_id):
     sync_devices_to_disabled_state(user, was_disabled, user.disabled)
     user.save()
     warnings = []
-    if settings.AUTHENTIK_API_URL and user.authentik_username:
+    if settings.AUTHENTIK_API_URL:
         try:
-            authentik_manager.set_active(user.authentik_username, active=not user.disabled)
+            updated = authentik_manager.set_active(user.authentik_username, user.email, active=not user.disabled)
+            if not updated:
+                warnings.append("No Authentik sign-in account was found for this employee.")
         except authentik_manager.AuthentikApiError as exc:
             warnings.append(f"Portal status changed, but Authentik account was not updated: {exc}")
     record(request, "UPDATE", "user", user.id, details={"disabled": user.disabled})
