@@ -66,6 +66,8 @@ class User(AbstractBaseUser):
     profile_text = models.TextField(null=True, blank=True)
     project_ids = models.JSONField(default=list, blank=True)
 
+    website_consent_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = "users"
 

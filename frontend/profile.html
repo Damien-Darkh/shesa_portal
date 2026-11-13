@@ -16,38 +16,88 @@
     <div class="page-title-section">
       <p class="subtitle">Account</p>
       <h1 class="title">My Profile</h1>
-      <p class="description">Your details are managed by an administrator. You can change your NAS password below.</p>
+      <p class="description">HR manages your job details. You can update your contact details and choose what appears on the company website.</p>
     </div>
 
-    <form id="profile-form" class="card space-y">
-      <div class="card-header"><h3 class="card-title">Personal details</h3></div>
+    <div id="sync-callout" class="callout callout--warning" role="status" hidden>
+      <i data-lucide="clock"></i>
+      <div id="sync-text"></div>
+    </div>
+
+    <!-- Job details: read-only for employees -->
+    <section class="card space-y">
+      <div class="card-header">
+        <h3 class="card-title">Job details</h3>
+        <p class="card-subtitle">Managed by HR. Contact an admin if these need to change.</p>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label" for="p-firstname">First name</label><input type="text" id="p-firstname" class="form-input readonly" disabled></div>
+        <div class="form-group"><label class="form-label" for="p-lastname">Last name</label><input type="text" id="p-lastname" class="form-input readonly" disabled></div>
+        <div class="form-group"><label class="form-label" for="p-email">Login email</label><input type="email" id="p-email" class="form-input readonly" disabled></div>
+        <div class="form-group"><label class="form-label" for="p-job">Job title</label><input type="text" id="p-job" class="form-input readonly" disabled></div>
+        <div class="form-group"><label class="form-label" for="p-dept">Department</label><input type="text" id="p-dept" class="form-input readonly" disabled></div>
+        <div class="form-group"><label class="form-label" for="p-office">Office location</label><input type="text" id="p-office" class="form-input readonly" disabled></div>
+      </div>
+    </section>
+
+    <!-- Contact details: employee-editable, synced to the website -->
+    <form id="contact-form" class="card space-y" novalidate>
+      <div class="card-header">
+        <h3 class="card-title">Contact details</h3>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="c-phone">Phone</label>
+          <input type="tel" id="c-phone" class="form-input" autocomplete="tel">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="c-linkedin">LinkedIn</label>
+          <input type="url" id="c-linkedin" class="form-input" placeholder="https://www.linkedin.com/in/…">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="c-emails">Other email addresses</label>
+        <textarea id="c-emails" rows="2" class="form-input" placeholder="One address per line"></textarea>
+      </div>
+      <p class="error-text" id="contact-error" role="alert" hidden></p>
+      <button class="btn btn-primary" type="submit" style="margin-top:0;width:auto;">Save contact details</button>
+    </form>
+
+    <!-- Company website: employee controls visibility and consent -->
+    <form id="web-form" class="card space-y" novalidate>
+      <div class="card-header">
+        <h3 class="card-title">Company website</h3>
+        <p class="card-subtitle">What visitors see on your public page.</p>
+      </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" id="w-show"> Show my profile on the company website
+      </label>
+
+      <div class="callout callout--info" id="consent-box" hidden>
+        <i data-lucide="info"></i>
+        <div>
+          <label class="checkbox-row" style="color:inherit;">
+            <input type="checkbox" id="w-consent">
+            I agree that my name, job title, bio and profile text will be public on the company website. I can hide my profile at any time.
+          </label>
+        </div>
+      </div>
 
       <div class="form-group">
-        <label class="form-label" for="p-email">Email</label>
-        <input type="email" id="p-email" class="form-input" disabled
-               style="background:#f8fafc;color:var(--text-muted);cursor:not-allowed;">
-        <span class="form-hint">Contact an admin if any of these details need to change.</span>
+        <label class="form-label" for="w-bio">Short bio</label>
+        <textarea id="w-bio" rows="3" class="form-input" maxlength="500"></textarea>
+        <span class="form-hint">Shown on your card in the team list.</span>
       </div>
 
-      <div class="grid-2">
-        <div class="form-group">
-          <label class="form-label" for="p-firstname">First name</label>
-          <input type="text" id="p-firstname" class="form-input" placeholder="Jane">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="p-lastname">Last name</label>
-          <input type="text" id="p-lastname" class="form-input" placeholder="Doe">
-        </div>
+      <div class="form-group">
+        <label class="form-label" for="w-text">Full profile</label>
+        <textarea id="w-text" rows="6" class="form-input" maxlength="4000"></textarea>
+        <span class="form-hint">Shown on your own page on the website.</span>
       </div>
 
-      <div class="grid-2">
-        <div class="form-group"><label class="form-label" for="p-job">Job title</label><input type="text" id="p-job" class="form-input"></div>
-        <div class="form-group"><label class="form-label" for="p-phone">Phone</label><input type="tel" id="p-phone" class="form-input"></div>
-      </div>
-      <div class="form-group"><label class="form-label" for="p-office">Office location</label><input type="text" id="p-office" class="form-input"></div>
-      <div class="callout callout--info"><i data-lucide="info"></i><div>Profile fields can only be edited by an administrator in the admin panel.</div></div>
-      <!-- Self-edit disabled. To re-enable: remove the disabled loop in the script and restore the save button:
-      <button class="btn btn-primary" type="submit" style="width:auto;">Save changes</button> -->
+      <p class="error-text" id="web-error" role="alert" hidden></p>
+      <button class="btn btn-primary" type="submit" style="margin-top:0;width:auto;">Save website profile</button>
     </form>
 
     <section class="card space-y" id="language-section">

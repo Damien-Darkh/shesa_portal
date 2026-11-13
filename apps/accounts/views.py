@@ -12,6 +12,7 @@ from apps.common.audit import record
 from apps.common.http import api_login_required, error, ok, read_json
 from apps.common.integrations import synology_manager
 from apps.common.integrations import sanity_sync
+from apps.common.utils import utcnow
 from apps.core.services import profile_dict
 
 LANGUAGES = ("it", "en")
@@ -83,6 +84,14 @@ def _serialize_me(user) -> dict:
         "dsm_username": user.dsm_username,
         "dsm_must_change_password": bool(user.dsm_must_change_password),
         "profile": profile_dict(user),
+        "other_emails": user.other_emails or [],
+        "linkedin_url": user.linkedin_url,
+        "profile_text": user.profile_text,
+        "project_ids": user.project_ids or [],
+        "show_on_website": bool(user.show_on_website),
+        "website_consent_at": user.website_consent_at.isoformat() if user.website_consent_at else None,
+        "sanity_pending": bool(user.sanity_pending),
+        "sanity_last_error": user.sanity_last_error,
     }
 
 def _push_to_sanity_warning(user) -> list[str]:
@@ -92,7 +101,8 @@ def _push_to_sanity_warning(user) -> list[str]:
         return ["Saved in the portal, but the website is not updated yet. It will retry automatically."]
     return []
 
-EMPLOYEE_EDITABLE = {"phone", "other_emails", "linkedin_url", "bio", "profile_text", "project_ids"}
+EMPLOYEE_EDITABLE = {"phone", "other_emails", "linkedin_url", "bio", "profile_text",
+                     "project_ids", "show_on_website", "website_consent"}
 
 
 @api_login_required
@@ -119,14 +129,24 @@ def me(request):
         from apps.accounts.admin_views import _apply_profile  # reuse validation
         changed = [k for k in data if k in EMPLOYEE_EDITABLE]
         if changed:
+            try:
+                if "linkedin_url" in data:
+                    user.linkedin_url = _validate_linkedin(data["linkedin_url"])
+            except ValueError as exc:
+                return error(422, str(exc))
             if "other_emails" in data:
                 user.other_emails = [e.strip() for e in data["other_emails"] or [] if e and e.strip()]
-            if "linkedin_url" in data:
-                user.linkedin_url = _validate_linkedin(data["linkedin_url"])
             if "profile_text" in data:
                 user.profile_text = (data["profile_text"] or "").strip() or None
             if "project_ids" in data:
                 user.project_ids = list(data["project_ids"] or [])
+            if "show_on_website" in data:
+                want = bool(data["show_on_website"])
+                if want and not user.show_on_website:
+                    if not data.get("website_consent"):
+                        return error(422, "Please confirm consent before publishing your profile.")
+                    user.website_consent_at = utcnow()
+                user.show_on_website = want
             user.save()
             profile_fields = {k: data[k] for k in ("phone", "bio") if k in data}
             if profile_fields:

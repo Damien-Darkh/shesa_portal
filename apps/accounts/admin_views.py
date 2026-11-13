@@ -226,9 +226,9 @@ def user_detail(request, user_id):
                 synology_manager.delete_user(user.dsm_username)
             except synology_manager.DsmApiError as exc:
                 warnings.append(f"NAS account deletion failed: {exc}")
-        if settings.AUTHENTIK_API_URL and user.authentik_username:
+        if settings.AUTHENTIK_API_URL and (user.authentik_username or user.email):
             try:
-                authentik_manager.delete_user(user.authentik_username)
+                authentik_manager.delete_account(user.authentik_username, user.email)
             except authentik_manager.AuthentikApiError as exc:
                 warnings.append(f"Authentik account deletion failed: {exc}")
         elif not user.authentik_username:
@@ -308,7 +308,9 @@ def user_detail(request, user_id):
         changed.append("department")
 
     if "show_on_website" in data:
-        user.show_on_website = bool(data["show_on_website"])
+        if data["show_on_website"]:
+            return error(422, "Only the employee can publish their own profile.")
+        user.show_on_website = False
         changed.append("show_on_website")
 
     user.save()

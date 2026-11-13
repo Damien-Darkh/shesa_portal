@@ -83,6 +83,19 @@ import { refreshPeople } from '../store.js';
     $('disable-btn').disabled = self;
   }
 
+  function renderWebsite() {
+    const on = !!user.show_on_website;
+    $('w-status').textContent = on ? t('Published on the website') : t('Not published');
+    $('w-hint').textContent = on
+      ? t('Hiding removes the profile from the website. Only the employee can publish it again.')
+      : t('The employee publishes their own profile from their profile page.');
+    $('w-hide').hidden = !on || !!user.disabled;
+    $('w-sync').hidden = !user.sanity_pending;
+    $('w-sync-text').textContent = user.sanity_last_error
+      ? t('The website is not up to date yet. It will retry automatically.')
+      : t('Saved. The website will update shortly.');
+  }
+
   const fill = () => {
     const p = user.profile;
     $('f-first').value = user.first_name || '';
@@ -234,6 +247,24 @@ import { refreshPeople } from '../store.js';
     }
   });
 
+  /* ---------- show on website ------------ */
+  $('w-hide').addEventListener('click', async () => {
+    if (!await confirmDialog({
+      title: t('Hide from website?'),
+      message: `Hide ${fullName(user)} from the company website? Only the employee can publish the profile again.`,
+      confirmText: t('Hide'),
+      danger: true,
+    })) return;
+    try {
+      const r = await api(`/api/admin/users/${id}/`, { method: 'PATCH', body: { show_on_website: false } });
+      await refreshAll();
+      showFlash(`${fullName(user)} is hidden from the website.`, 'success');
+      (r.warnings || []).forEach(w => showFlash(w, 'info'));
+    } catch (error) {
+      showFlash(error.message, 'error');
+    }
+  });
+  
   /* ---------- Danger zone: disable / enable, delete ---------- */
 
   $('disable-btn').addEventListener('click', async () => {

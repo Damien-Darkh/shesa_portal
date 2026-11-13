@@ -68,6 +68,20 @@
       </section>
       <p class="card-subtitle" id="self-note" hidden>You can't change your own admin or disabled status, or delete your own account.</p>
 
+      <!-- Company website: admins can only hide a profile; the employee publishes it -->
+      <section class="card space-y" id="web-card">
+        <div class="card-header"><h3 class="card-title">Company website</h3></div>
+        <p class="value" id="w-status">--</p>
+        <p class="form-hint" id="w-hint"></p>
+        <div class="callout callout--warning" id="w-sync" hidden>
+          <i data-lucide="triangle-alert"></i>
+          <div id="w-sync-text"></div>
+        </div>
+        <button type="button" class="btn btn-outline" id="w-hide" hidden>
+          <i data-lucide="eye-off"></i> Hide from website
+        </button>
+      </section>
+
       <!-- NAS -->
       <section class="card space-y" id="nas-card" hidden>
         <div class="card-header"><h3 class="card-title">NAS account</h3><p class="card-subtitle">NAS username: <strong class="mono" id="nas-user" data-no-i18n></strong></p></div>
