@@ -39,6 +39,130 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     $('no-nas-section').hidden = false;
   }
 
+  /* ---------- Website photo ---------- */
+  const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  const MAX_PHOTO = 5 * 1024 * 1024;
+
+  function renderPhoto(url) {
+    renderAvatar($('photo-preview'), { photoUrl: url, firstName: user.first_name, lastName: user.last_name });
+    $('photo-remove').hidden = !url;
+  }
+  function photoError(msg) {
+    $('photo-error').textContent = t(msg);
+    $('photo-error').hidden = false;
+  }
+
+  $('photo-pick').addEventListener('click', () => $('photo-file').click());
+  $('photo-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    $('photo-error').hidden = true;
+    if (!PHOTO_TYPES.includes(file.type)) return photoError('Use a JPEG, PNG or WebP image.');
+    if (file.size > MAX_PHOTO) return photoError('Photo must be 5 MB or smaller.');
+
+    const body = new FormData();
+    body.append('photo', file);
+    $('photo-pick').disabled = true;
+    try {
+      const r = await api('/api/me/photo', { method: 'POST', body });
+      renderPhoto(r.photo_url);
+      showFlash(t('Photo updated.'), 'success');
+    } catch (err) {
+      photoError(err.message);
+    } finally {
+      $('photo-pick').disabled = false;
+    }
+  });
+
+  $('photo-remove').addEventListener('click', async () => {
+    $('photo-error').hidden = true;
+    try {
+      await api('/api/me/photo', { method: 'DELETE' });
+      renderPhoto(null);
+      showFlash(t('Photo removed.'), 'success');
+    } catch (err) {
+      photoError(err.message);
+    }
+  });
+
+  /* ---------- Projects ---------- */
+  let projectCatalog = [];
+  let chosen = [...(me.project_ids || [])];
+
+  function renderProjects() {
+    const titles = Object.fromEntries(projectCatalog.map(p => [p.id, p.title]));
+    const available = projectCatalog.filter(p => !chosen.includes(p.id));
+
+    const sel = $('project-select');
+    sel.replaceChildren(
+      new Option(available.length ? t('Choose a project') : t('No more projects to add'), ''),
+      ...available.map(p => new Option(p.title, p.id)),
+    );
+    sel.disabled = !available.length;
+    $('project-add').disabled = !available.length;
+
+    const list = $('project-list');
+    list.replaceChildren(...chosen.map(id => {
+      const title = titles[id] || t('Unavailable project');
+      const li = document.createElement('li');
+      li.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:.5rem;'
+        + 'padding:.5rem .75rem;border:1px solid var(--border-color);border-radius:.625rem;';
+      const name = document.createElement('span');
+      name.textContent = title;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn btn-outline btn-sm';
+      remove.setAttribute('aria-label', `${t('Remove')} ${title}`);
+      remove.innerHTML = '<i data-lucide="x"></i>';
+      remove.addEventListener('click', () => {
+        chosen = chosen.filter(x => x !== id);
+        renderProjects();
+      });
+      li.append(name, remove);
+      return li;
+    }));
+    $('project-empty').hidden = chosen.length > 0;
+    refreshIcons();
+  }
+
+  $('project-add').addEventListener('click', () => {
+    const id = $('project-select').value;
+    if (!id || chosen.includes(id)) return;
+    chosen.push(id);
+    renderProjects();
+    $('project-select').focus();
+  });
+
+  $('project-save').addEventListener('click', async () => {
+    const err = $('project-error');
+    err.hidden = true;
+    const btn = $('project-save');
+    btn.disabled = true;
+    try {
+      me = await api('/api/me/', { method: 'PATCH', body: { project_ids: chosen } });
+      chosen = [...(me.project_ids || [])];
+      renderProjects();
+      (me.warnings || []).forEach(w => showFlash(w, 'info'));
+      showFlash(t('Projects saved.'), 'success');
+    } catch (ex) {
+      err.textContent = t(ex.message);
+      err.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Initial state
+  renderPhoto(me.photo_url);
+  try {
+    projectCatalog = (await api('/api/me/projects/')).projects;
+  } catch (ex) {
+    $('project-error').textContent = t(ex.message);
+    $('project-error').hidden = false;
+  }
+  renderProjects();
+
   /* ---------- Render editable state from the server ---------- */
   function render() {
     $('c-phone').value = me.profile.phone || '';

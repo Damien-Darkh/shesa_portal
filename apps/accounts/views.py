@@ -12,6 +12,8 @@ from apps.common.audit import record
 from apps.common.http import api_login_required, error, ok, read_json
 from apps.common.integrations import synology_manager
 from apps.common.integrations import sanity_sync
+from apps.common.integrations import sanity_photo, sanity_projects
+from apps.common.integrations.sanity_client import SanityError
 from apps.common.utils import utcnow
 from apps.core.services import profile_dict
 
@@ -92,6 +94,7 @@ def _serialize_me(user) -> dict:
         "website_consent_at": user.website_consent_at.isoformat() if user.website_consent_at else None,
         "sanity_pending": bool(user.sanity_pending),
         "sanity_last_error": user.sanity_last_error,
+        "photo_url": sanity_photo.display_url(user),
     }
 
 def _push_to_sanity_warning(user) -> list[str]:
@@ -128,7 +131,16 @@ def me(request):
 
         from apps.accounts.admin_views import _apply_profile  # reuse validation
         changed = [k for k in data if k in EMPLOYEE_EDITABLE]
-        if changed:
+        if changed and "project_ids" in data:
+            try:
+                available = {p["id"] for p in sanity_projects.list_projects()}
+            except SanityError:
+                return error(503, "Projects are unavailable right now. Try again shortly.")
+
+            # Only check additions, so removing a project still works if Sanity is slow.
+            new_ids = set(data["project_ids"] or []) - set(user.project_ids or [])
+            if new_ids - available:
+                return error(422, "One or more selected projects are not available.")
             try:
                 if "linkedin_url" in data:
                     user.linkedin_url = _validate_linkedin(data["linkedin_url"])
@@ -204,3 +216,31 @@ def change_dsm_password(request):
     user.save()
     record(request, "UPDATE", "nas_password", user.id)
     return ok({"updated": True})
+
+@api_login_required
+@require_GET
+def my_projects(request):
+    try:
+        items = sanity_projects.list_projects()
+    except SanityError:
+        return error(503, "Projects are unavailable right now. Try again shortly.")
+    return ok({"projects": items, "selected": request.user.project_ids or []})
+
+
+@api_login_required
+@require_http_methods(["POST", "DELETE"])
+def my_photo(request):
+    user = request.user
+    try:
+        if request.method == "DELETE":
+            sanity_photo.remove_photo(user)
+            record(request, "UPDATE", "user", user.id, details={"self_edit": ["photo"], "removed": True})
+            return ok({"photo_url": None})
+        upload = request.FILES.get("photo")
+        if not upload:
+            return error(400, "Choose a photo to upload.")
+        url = sanity_photo.set_photo(user, upload)
+    except sanity_photo.PhotoError as exc:
+        return error(422, str(exc))
+    record(request, "UPDATE", "user", user.id, details={"self_edit": ["photo"]})
+    return ok({"photo_url": url})

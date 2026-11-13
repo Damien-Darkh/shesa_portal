@@ -40,6 +40,52 @@
       </div>
     </section>
 
+    <!-- Website photo -->
+    <section class="card space-y" id="photo-card">
+      <div class="card-header">
+        <h3 class="card-title">Photo</h3>
+        <p class="card-subtitle">Shown on the company website. JPEG, PNG or WebP, at least 200 × 200 px, up to 5 MB.</p>
+      </div>
+      <div class="row-between" style="align-items:center;">
+        <div class="avatar-container" style="width:7rem;height:7rem;">
+          <div class="avatar-box" id="photo-preview"><span>--</span></div>
+        </div>
+        <div class="btn-row">
+          <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp" hidden>
+          <button type="button" class="btn btn-outline" id="photo-pick" style="margin-top:0;">
+            <i data-lucide="upload"></i> Upload photo
+          </button>
+          <button type="button" class="btn btn-outline" id="photo-remove" style="margin-top:0;" hidden>
+            <i data-lucide="trash-2"></i> Remove
+          </button>
+        </div>
+      </div>
+      <p class="error-text" id="photo-error" role="alert" hidden></p>
+    </section>
+
+    <!-- Projects -->
+    <section class="card space-y" id="projects-card">
+      <div class="card-header">
+        <h3 class="card-title">Projects</h3>
+        <p class="card-subtitle">Projects you have worked on. Shown on the company website.</p>
+      </div>
+      <div class="row-between" style="align-items:flex-end;gap:.5rem;">
+        <div class="form-group" style="flex:1;min-width:14rem;">
+          <label class="form-label" for="project-select">Add a project</label>
+          <select id="project-select" class="form-input"></select>
+        </div>
+        <button type="button" class="btn btn-outline" id="project-add" style="margin-top:0;">
+          <i data-lucide="plus"></i> Add
+        </button>
+      </div>
+      <ul id="project-list" style="list-style:none;display:grid;gap:.5rem;"></ul>
+      <p class="form-hint" id="project-empty">No projects selected yet.</p>
+      <p class="error-text" id="project-error" role="alert" hidden></p>
+      <button type="button" class="btn btn-primary" id="project-save" style="margin-top:0;width:auto;">
+        Save projects
+      </button>
+    </section>
+
     <!-- Contact details: employee-editable, synced to the website -->
     <form id="contact-form" class="card space-y" novalidate>
       <div class="card-header">

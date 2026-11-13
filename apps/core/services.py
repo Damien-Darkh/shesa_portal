@@ -1,4 +1,5 @@
 from apps.common.utils import utcnow
+from apps.common.integrations import sanity_photo
 
 from .models import Department, Notification
 
@@ -32,7 +33,7 @@ def profile_dict(user) -> dict:
         "phone": p.phone if p else None,
         "office_location": p.office_location if p else None,
         "bio": p.bio if p else None,
-        "photo_url": p.photo_url if p else None,
+        "photo_url": sanity_photo.display_url(user) or (p.photo_url if p else None),
         "start_date": p.start_date.isoformat() if p and p.start_date else None,
         "updated_at": p.updated_at.isoformat() if p and p.updated_at else None,
     }
