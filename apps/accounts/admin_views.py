@@ -208,14 +208,13 @@ def users(request):
     }, status=201)
 
 def _push_to_sanity(user) -> str | None:
-    """Pushes portal data to the website. Returns a warning for HR if the push did not succeed."""
+    if not sanity_sync.is_enabled():
+        return ("Website sync is off (check SANITY_SYNC_ENABLED, SANITY_PROJECT_ID, "
+                "SANITY_WRITE_TOKEN). This employee is not on the website.")
     try:
         sanity_sync.push_user(user)
     except sanity_sync.PushError as exc:
-        return (
-            "Saved in the portal, but the website is not updated yet. "
-            "It will retry automatically."
-        )
+        return f"Saved in the portal, but the website is not updated: {exc}"
     return None
 
 @api_admin_required
@@ -255,6 +254,10 @@ def user_detail(request, user_id):
             except sanity_client.SanityError as exc:
                 warnings.append(f"Website card not hidden yet: {exc}")
         email, uid = user.email, user.id
+        try:
+            sanity_sync.hide_person(user)
+        except (sanity_client.SanityError, sanity_sync.PushError) as exc:
+            warnings.append(f"Website card not hidden yet: {exc}")
         user.delete()
         record(request, "DELETE", "user", uid, details={"email": email})
         return ok({"deleted": True, "warnings": warnings})
@@ -347,6 +350,10 @@ def toggle_disabled(request, user_id):
         warnings += delete_all_devices(user)
         user.is_admin = False
         user.vpn_access = False
+    try:
+        sanity_sync.hide_person(user)
+    except (sanity_client.SanityError, sanity_sync.PushError) as exc:
+        warnings.append(f"Website card not hidden yet: {exc}")
     user.disabled = not user.disabled
     user.save()
     if settings.AUTHENTIK_API_URL and user.authentik_username:

@@ -16,6 +16,8 @@ from django.utils import timezone
 from apps.common.integrations import sanity_client
 from apps.common.integrations.sanity_client import SanityError
 
+import re, unicodedata, secrets
+
 logger = logging.getLogger(__name__)
 
 TEAM_TYPE = "teamMember"
@@ -36,6 +38,9 @@ FIELD_MAP = {
     "show_on_website": "showOnWebsite",
 }
 
+RESERVED_SLUGS = {"about","admin","api","careers","contact","expertise","gallery","login",
+                  "logout","memberships","news","people","portal","privacy","projects",
+                  "search","studio"}
 
 class PushError(Exception):
     """A push failed. `retryable` decides whether the retry job should try again."""
@@ -45,9 +50,26 @@ class PushError(Exception):
         self.retryable = retryable
 
 
+def _make_slug(name: str, user_id: int) -> str:
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    base = re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-") or f"person-{user_id}"
+    if base in RESERVED_SLUGS:
+        base = f"{base}-{user_id}"
+    taken = sanity_client.query('*[_type=="teamMember" && slug.current==$s][0]._id', {"s": base})
+    if taken:
+        base = f"{base}-{user_id}"
+    return base[:90]
+
 def is_enabled() -> bool:
     return bool(settings.SANITY_SYNC_ENABLED and sanity_client.is_configured())
 
+def _to_blocks(text: str | None):
+    if not text or not text.strip():
+        return None
+    return [{
+        "_type": "block", "_key": secrets.token_hex(6), "style": "normal", "markDefs": [],
+        "children": [{"_type": "span", "_key": secrets.token_hex(6), "text": para.strip(), "marks": []}],
+    } for para in text.split("\n\n") if para.strip()]
 
 def _team_values(user) -> dict:
     """The current portal values for every mapped field, keyed by Sanity field name."""
@@ -57,7 +79,7 @@ def _team_values(user) -> dict:
         "email": user.email,
         "other_emails": user.other_emails or [],
         "linkedin_url": user.linkedin_url,
-        "profile_text": user.profile_text,
+        "profile": _to_blocks(user.profile_text),
         "job_title": profile.job_title if profile else None,
         "department": profile.department.name if profile and profile.department_id else None,
         "office_location": profile.office_location if profile else None,
@@ -67,6 +89,13 @@ def _team_values(user) -> dict:
     }
     return {FIELD_MAP[key]: value for key, value in source.items()}
 
+def hide_person(user) -> None:
+    if not sanity_client.is_configured():
+        return
+    doc_id = user.sanity_id or sanity_client.query(
+        '*[_type=="teamMember" && externalId==$ext][0]._id', {"ext": str(user.id)})
+    if doc_id:
+        sanity_client.mutate([{"patch": {"id": doc_id, "set": {"showOnWebsite": False}}}])
 
 def _classify(exc: SanityError) -> PushError:
     return PushError(str(exc), retryable=bool(exc.retryable))
@@ -102,9 +131,8 @@ def _upsert_team_member(user) -> None:
         doc_id = f"teamMember.portal-{user.id}"
         mutations = [{
             "createIfNotExists": {
-                "_id": doc_id,
-                "_type": TEAM_TYPE,
-                "externalId": str(user.id),
+                "_id": doc_id, "_type": TEAM_TYPE, "externalId": str(user.id),
+                "slug": {"_type": "slug", "current": _make_slug(user.full_name, user.id)},
                 **values,
             }
         }]
