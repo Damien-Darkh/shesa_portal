@@ -99,11 +99,11 @@
       </section>
     </div>
 
-    <!-- Active VPN Devices -->
-    <section class="card space-y">
+    <!-- Active VPN Devices. Shown only when the employee has VPN access (admins always do). -->
+    <section class="card space-y" id="vpn-section" hidden>
       <div class="card-header row-between" style="margin-bottom:0;">
         <h3 class="card-title">VPN Devices</h3>
-        <a href="add_device.html" class="btn btn-primary btn-sm" style="margin-top:0;width:auto;">
+        <a href="add_device.html" class="btn btn-primary btn-sm" id="add-device-link" style="margin-top:0;width:auto;">
           <i data-lucide="plus"></i> Add Device
         </a>
       </div>

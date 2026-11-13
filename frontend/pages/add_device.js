@@ -1,10 +1,14 @@
-// Create a VPN device for the signed-in user. The server returns the WireGuard config once; it is handed to
-// device_created.html through sessionStorage and removed there.
-import { ready, showFlash, refreshIcons } from '../layout.js';
+// Create a VPN device for the signed-in user. Only reachable when VPN access is enabled for the account.
+import { ready, dbData, showFlash, refreshIcons } from '../layout.js';
 import { api } from '../api.js';
 
 (async () => {
   if (!await ready) return;
+  if (!dbData.currentUser.can_use_vpn) {
+    sessionStorage.setItem('portal.flash', 'VPN access is not enabled for your account. Contact IT.');
+    location.replace('index.html');
+    return;
+  }
   refreshIcons();
   document.getElementById('add-device-form').addEventListener('submit', async e => {
     e.preventDefault();

@@ -75,7 +75,9 @@ import { api, ApiError } from '../api.js';
     kv('NAS username', detail.nas_account ? mono(detail.nas_account) : 'Not provisioned') +
     kv('Password change', detail.nas_account ? (detail.dsm_must_change_password ? 'Required at next sign-in' : 'Not required') : '—') +
     kv('Authentik username', detail.authentik_account ? mono(detail.authentik_account) : 'Not provisioned') +
+    kv('VPN access', detail.is_admin ? t('Administrators always have VPN access') : (u.vpn_access ? t('Yes') : t('No'))) +
     kv('Devices', `${devices.filter(d => !d.is_revoked).length} / ${devices.length}`);
+    
 
   const chain = []; for (let q = dept, n = 0; q && n < 20; q = dbData.departments.find(x => x.id === q.parent_id), n++) chain.unshift(q.name);
   const mgr = dept && dbData.usersDirectory.find(x => x.id === dept.manager_id);

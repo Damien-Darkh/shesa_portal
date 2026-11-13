@@ -1,4 +1,4 @@
-// Admin: edit one employee (profile, access, NAS, devices, delete). Changes go straight to the API.
+// Admin: edit one employee (profile, access, VPN, NAS, devices, delete). Changes go straight to the API.
 import { ready, dbData, requireAdmin, getIdParam, fullName, fillDepartmentSelect, showFlash, refreshIcons, t, confirmDialog, fmtDate, renderAvatar, readImageFile, setupBackLink } from '../layout.js';
 import { api, ApiError } from '../api.js';
 import { refreshPeople } from '../store.js';
@@ -17,15 +17,31 @@ import { refreshPeople } from '../store.js';
   const load = async () => { user = await api(`/api/admin/users/${id}/`); user.profile = user.profile || {}; };
   const header = () => {
     $('eu-name').textContent = fullName(user); $('eu-email').textContent = user.email;
-    $('eu-status').innerHTML = `<span class="status ${user.disabled ? 'status--off' : 'status--active'}"><span class="pulse"></span>${user.disabled ? 'Disabled' : 'Active'}${user.is_admin ? ' · Admin' : ''}</span>`;
+    $('eu-status').innerHTML = `<span class="status ${user.disabled ? 'status--off' : 'status--active'}"><span class="pulse"></span>${user.disabled ? t('Disabled') : t('Active')}${user.is_admin ? ' · Admin' : ''}</span>`;
   };
   const preview = () => renderAvatar($('avatar-preview-box'), { photoUrl: $('f-photo').value.trim(), firstName: $('f-first').value.trim(), lastName: $('f-last').value.trim() });
+
+  /* VPN section state: admins are always entitled; others depend on the flag. */
+  function renderVpnState() {
+    const isAdminTarget = !!user.is_admin;
+    const entitled = isAdminTarget || !!user.vpn_access;
+    $('f-vpn').checked = entitled;
+    $('f-vpn').disabled = isAdminTarget;
+    $('vpn-note').textContent = isAdminTarget
+      ? t('Administrators always have VPN access')
+      : t('Turning this off disconnects the employee\'s VPN devices. They can be restored by turning it back on.');
+    $('dev-form').querySelectorAll('input, button').forEach(el => { el.disabled = !entitled; });
+    $('dev-hint').textContent = entitled ? '' : t('Enable VPN access for this employee before adding a device.');
+    $('dev-hint').hidden = entitled;
+  }
+
   const fill = () => {
     const p = user.profile;
     $('f-first').value = user.first_name || ''; $('f-last').value = user.last_name || ''; $('f-email').value = user.email;
     $('f-job').value = p.job_title || ''; fillDepartmentSelect($('f-dept'), p.department_id);
     $('f-phone').value = p.phone || ''; $('f-office').value = p.office_location || ''; $('f-photo').value = p.photo_url || ''; $('f-bio').value = p.bio || '';
     $('f-admin').checked = !!user.is_admin; $('f-disabled').checked = !!user.disabled;
+    renderVpnState();
     preview();
   };
 
@@ -56,11 +72,20 @@ import { refreshPeople } from '../store.js';
 
   $('access-form').addEventListener('submit', async e => {
     e.preventDefault();
+    const wantDisabled = $('f-disabled').checked;
+    const wantVpn = $('f-vpn').checked;
+    if (wantDisabled && !user.disabled && !await confirmDialog({
+      title: t('Disable employee?'),
+      message: `Disabling ${fullName(user)} permanently deletes all of their VPN devices, from the VPN server and from the portal. They cannot be restored; the devices must be added again after re-enabling.`,
+      confirmText: t('Disable'), danger: true })) { $('f-disabled').checked = false; return; }
     try {
-      await api(`/api/admin/users/${id}/`, { method: 'PATCH', body: { is_admin: $('f-admin').checked, disabled: $('f-disabled').checked } });
+      const body = { is_admin: $('f-admin').checked, disabled: wantDisabled };
+      if (!user.is_admin) body.vpn_access = wantVpn;
+      const r = await api(`/api/admin/users/${id}/`, { method: 'PATCH', body });
       await Promise.all([load(), refreshPeople()]);
       header(); fill(); renderDevices();
       showFlash(`Saved changes for ${fullName(user)}.`, 'success');
+      (r.warnings || []).forEach(w => showFlash(w, 'info'));
     } catch (error) { showFlash(error.message, 'error'); }
   });
 
@@ -68,20 +93,20 @@ import { refreshPeople } from '../store.js';
     const rows = user.devices || [];
     $('dev-tbody').innerHTML = rows.length ? rows.map(d => `<tr>
       <td data-no-i18n>${String(d.device_name).replace(/</g, '&lt;')}</td><td class="mono">${d.wg_address || ''}</td><td>${fmtDate(d.created_at)}</td>
-      <td><span class="status ${d.is_revoked ? 'status--off' : 'status--active'}"><span class="pulse"></span>${d.is_revoked ? 'Disconnected' : 'Active'}</span></td>
+      <td><span class="status ${d.is_revoked ? 'status--off' : 'status--active'}"><span class="pulse"></span>${d.is_revoked ? t('Disconnected') : t('Active')}</span></td>
       <td><div class="btn-row">
-        ${!d.is_revoked ? `<button type="button" class="btn btn-red btn-sm" data-act="revoke" data-id="${d.id}"><i data-lucide="power"></i> Disconnect</button>`
-          : !d.auto_revoked ? `<button type="button" class="btn btn-outline btn-sm" data-act="reconnect" data-id="${d.id}"><i data-lucide="refresh-ccw"></i> Reconnect</button>` : ''}
-        <button type="button" class="btn btn-red btn-sm" data-act="delete" data-id="${d.id}"><i data-lucide="trash-2"></i> Delete</button></div></td></tr>`).join('')
-      : '<tr><td colspan="5"><div class="empty-state"><i data-lucide="inbox"></i><span>No devices.</span></div></td></tr>';
+        ${!d.is_revoked ? `<button type="button" class="btn btn-red btn-sm" data-act="revoke" data-id="${d.id}"><i data-lucide="power"></i> ${t('Disconnect')}</button>`
+          : !d.auto_revoked ? `<button type="button" class="btn btn-outline btn-sm" data-act="reconnect" data-id="${d.id}"><i data-lucide="refresh-ccw"></i> ${t('Reconnect')}</button>` : ''}
+        <button type="button" class="btn btn-red btn-sm" data-act="delete" data-id="${d.id}"><i data-lucide="trash-2"></i> ${t('Delete')}</button></div></td></tr>`).join('')
+      : `<tr><td colspan="5"><div class="empty-state"><i data-lucide="inbox"></i><span>${t('No devices.')}</span></div></td></tr>`;
     refreshIcons();
   }
   $('dev-tbody').addEventListener('click', async e => {
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const d = user.devices.find(x => x.id === Number(b.dataset.id));
     const action = b.dataset.act;
-    if (action === 'delete' && !await confirmDialog({ title: 'Delete device?', message: `Permanently delete ${d.device_name}? This removes the VPN peer entirely and cannot be undone.`, confirmText: 'Delete', danger: true })) return;
-    if (action === 'revoke' && !await confirmDialog({ title: 'Disconnect device?', message: `Disconnect ${d.device_name}? This device will lose VPN access immediately.`, confirmText: 'Disconnect', danger: true })) return;
+    if (action === 'delete' && !await confirmDialog({ title: t('Delete device?'), message: `Permanently delete ${d.device_name}? This removes the VPN peer entirely and cannot be undone.`, confirmText: t('Delete'), danger: true })) return;
+    if (action === 'revoke' && !await confirmDialog({ title: t('Disconnect device?'), message: `Disconnect ${d.device_name}? This device will lose VPN access immediately.`, confirmText: t('Disconnect'), danger: true })) return;
     try {
       await api(`/api/devices/${d.id}/${action === 'delete' ? 'delete' : action}`, { method: 'POST' });
       await load(); renderDevices();
@@ -99,7 +124,9 @@ import { refreshPeople } from '../store.js';
   });
 
   $('delete-btn').addEventListener('click', async () => {
-    if (!await confirmDialog({ title: 'Delete employee?', message: `Permanently delete ${user.email} and all of their devices? This cannot be undone.`, confirmText: 'Delete', danger: true })) return;
+    const devices = (user.devices || []).length;
+    const extra = devices ? ` Their ${devices} VPN device${devices > 1 ? 's' : ''} will also be removed permanently.` : '';
+    if (!await confirmDialog({ title: t('Delete employee?'), message: `Permanently delete ${user.email} and all of their devices? This cannot be undone.${extra}`, confirmText: t('Delete'), danger: true })) return;
     try {
       const r = await api(`/api/admin/users/${id}/`, { method: 'DELETE' });
       (r.warnings || []).forEach(w => sessionStorage.setItem('portal.flash', w));
@@ -109,7 +136,7 @@ import { refreshPeople } from '../store.js';
 
   $('nas-reset').addEventListener('click', async e => {
     e.preventDefault();
-    if (!await confirmDialog({ title: 'Reset NAS password?', message: `Reset the NAS password for ${fullName(user)}? A temporary password is generated and they must set their own at next sign-in.`, confirmText: 'Reset password' })) return;
+    if (!await confirmDialog({ title: t('Reset NAS password?'), message: `Reset the NAS password for ${fullName(user)}? A temporary password is generated and they must set their own at next sign-in.`, confirmText: t('Reset password') })) return;
     try {
       const r = await api(`/api/admin/users/${id}/reset-nas-password`, { method: 'POST' });
       sessionStorage.setItem(`portal.tempPassword.${id}`, r.nas_temporary_password);

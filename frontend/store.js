@@ -21,6 +21,7 @@ export async function refreshMe() {
   dbData.currentUser = {
     id: me.id, email: me.email, first_name: me.first_name, last_name: me.last_name,
     is_admin: me.is_admin, disabled: me.disabled, language: me.language,
+    vpn_access: !!me.vpn_access, can_use_vpn: !!me.can_use_vpn,
     dsm_username: me.dsm_username, dsm_must_change_password: me.dsm_must_change_password,
     roles: (me.roles || []).map(name => ({ name })), profile: me.profile, devices,
   };
