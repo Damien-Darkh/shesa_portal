@@ -50,6 +50,8 @@ class User(AbstractBaseUser):
 
     roles = models.ManyToManyField("Role", related_name="users", db_table="user_roles", blank=True)
 
+    vpn_access = models.BooleanField(default=False)
+
     class Meta:
         db_table = "users"
 

@@ -56,12 +56,14 @@
         <button class="btn btn-primary" type="submit" style="margin-top:0;width:auto;">Save profile</button>
       </form>
 
-      <!-- Access -->
+            <!-- Access -->
       <section class="card space-y" id="access-card">
         <div class="card-header"><h3 class="card-title">Access</h3></div>
         <form id="access-form" class="space-y">
           <label class="checkbox-row"><input type="checkbox" id="f-admin"> Administrator (can manage employees, devices and leave)</label>
-          <label class="checkbox-row"><input type="checkbox" id="f-disabled"> Disabled: revokes all their devices immediately on save</label>
+          <label class="checkbox-row"><input type="checkbox" id="f-vpn"> VPN access</label>
+          <p class="form-hint" id="vpn-note"></p>
+          <label class="checkbox-row"><input type="checkbox" id="f-disabled"> Disabled: deletes all their VPN devices immediately on save</label>
           <button class="btn btn-outline" type="submit">Save access</button>
         </form>
       </section>
@@ -84,6 +86,7 @@
         </div>
         <form id="dev-form" class="form-card" style="margin-top:.5rem;">
           <div class="form-group"><label class="form-label" for="dev-name">Add a device for this employee</label><input type="text" id="dev-name" class="form-input" placeholder="iPhone" required></div>
+          <p class="form-hint" id="dev-hint" hidden></p>
           <button class="btn btn-outline" type="submit"><i data-lucide="plus"></i> Create VPN access</button>
         </form>
       </section>

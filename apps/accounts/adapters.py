@@ -35,6 +35,9 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
             if not user.last_name and data.get("family_name"):
                 user.last_name = data["family_name"]
                 changed.append("last_name")
+            if not user.authentik_username and data.get("preferred_username"):
+                user.authentik_username = data["preferred_username"]  # so delete/disable find this account
+                changed.append("authentik_username")
             if changed:
                 user.save(update_fields=changed)
 
@@ -45,7 +48,14 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         if is_first_ever_user:
             user.is_admin = True
             user.save(update_fields=["is_admin"])
+        update = []
         if not user.oidc_subject:
             user.oidc_subject = sociallogin.account.uid
-            user.save(update_fields=["oidc_subject"])
+            update.append("oidc_subject")
+        preferred = (sociallogin.account.extra_data or {}).get("preferred_username")
+        if not user.authentik_username and preferred:
+            user.authentik_username = preferred
+            update.append("authentik_username")
+        if update:
+            user.save(update_fields=update)
         return user
