@@ -52,6 +52,20 @@ class User(AbstractBaseUser):
 
     vpn_access = models.BooleanField(default=False)
 
+    # Sanity (company website) link
+    sanity_id = models.CharField(max_length=128, null=True, blank=True, unique=True)
+    sanity_pending = models.BooleanField(default=False, db_index=True)
+    sanity_last_error = models.TextField(null=True, blank=True)
+    sanity_synced_at = models.DateTimeField(null=True, blank=True)
+    photo_uri = models.CharField(max_length=255, null=True, blank=True)
+    show_on_website = models.BooleanField(default=False)
+
+    # Employee-facing profile fields stored in Postgres
+    other_emails = models.JSONField(default=list, blank=True)
+    linkedin_url = models.URLField(max_length=255, null=True, blank=True)
+    profile_text = models.TextField(null=True, blank=True)
+    project_ids = models.JSONField(default=list, blank=True)
+
     class Meta:
         db_table = "users"
 

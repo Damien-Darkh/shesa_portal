@@ -161,6 +161,16 @@ NAS_IP = os.environ.get("NAS_IP", "")
 NAS_SHARE_NAME = os.environ.get("NAS_SHARE_NAME", "")
 LAUNCHER_TOKEN_TTL_MINUTES = int(os.environ.get("LAUNCHER_TOKEN_TTL_MINUTES", "60"))
 
+# ---- Sanity (company website content store) ----
+SANITY_PROJECT_ID = os.environ.get("SANITY_PROJECT_ID", "")
+SANITY_DATASET = os.environ.get("SANITY_DATASET", "production")
+SANITY_API_VERSION = os.environ.get("SANITY_API_VERSION", "2026-01-01")
+SANITY_WRITE_TOKEN = os.environ.get("SANITY_WRITE_TOKEN", "")
+SANITY_SYNC_TIME = os.environ.get("SANITY_SYNC_TIME", "03:00")
+SANITY_SYNC_ENABLED = env_bool("SANITY_SYNC_ENABLED", False)
+SANITY_RETRY_INTERVAL_MINUTES = int(os.environ.get("SANITY_RETRY_INTERVAL_MINUTES", "5"))
+SANITY_MAX_ATTEMPTS = int(os.environ.get("SANITY_MAX_ATTEMPTS", "20"))
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"  # processes run in UTC; datetimes are stored naive UTC
 USE_I18N = True

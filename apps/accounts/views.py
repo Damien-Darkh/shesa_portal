@@ -11,6 +11,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from apps.common.audit import record
 from apps.common.http import api_login_required, error, ok, read_json
 from apps.common.integrations import synology_manager
+from apps.common.integrations import sanity_sync
 from apps.core.services import profile_dict
 
 LANGUAGES = ("it", "en")
@@ -84,24 +85,70 @@ def _serialize_me(user) -> dict:
         "profile": profile_dict(user),
     }
 
+def _push_to_sanity_warning(user) -> list[str]:
+    try:
+        sanity_sync.push_user(user)
+    except sanity_sync.PushError:
+        return ["Saved in the portal, but the website is not updated yet. It will retry automatically."]
+    return []
+
+EMPLOYEE_EDITABLE = {"phone", "other_emails", "linkedin_url", "bio", "profile_text", "project_ids"}
+
 
 @api_login_required
 @require_http_methods(["GET", "PATCH"])
 def me(request):
     user = request.user
     if request.method == "PATCH":
-        # Self-service is limited to the language. Names and profile are managed by admins.
         try:
             data = read_json(request)
         except ValueError as exc:
             return error(400, str(exc))
+
         if "language" in data:
             if data["language"] not in LANGUAGES:
                 return error(422, "Unsupported language.")
             user.language = data["language"]
             user.save(update_fields=["language"])
             record(request, "UPDATE", "user", user.id, details={"language": user.language})
+
+        forbidden = [k for k in data if k not in EMPLOYEE_EDITABLE | {"language"}]
+        if forbidden:
+            return error(403, f"You cannot change: {', '.join(forbidden)}. Contact HR.")
+
+        from apps.accounts.admin_views import _apply_profile  # reuse validation
+        changed = [k for k in data if k in EMPLOYEE_EDITABLE]
+        if changed:
+            if "other_emails" in data:
+                user.other_emails = [e.strip() for e in data["other_emails"] or [] if e and e.strip()]
+            if "linkedin_url" in data:
+                user.linkedin_url = _validate_linkedin(data["linkedin_url"])
+            if "profile_text" in data:
+                user.profile_text = (data["profile_text"] or "").strip() or None
+            if "project_ids" in data:
+                user.project_ids = list(data["project_ids"] or [])
+            user.save()
+            profile_fields = {k: data[k] for k in ("phone", "bio") if k in data}
+            if profile_fields:
+                _apply_profile(user, profile_fields)
+            record(request, "UPDATE", "user", user.id, details={"self_edit": changed})
+
+        warnings = _push_to_sanity_warning(user) if changed else []
+        body = _serialize_me(user)
+        body["warnings"] = warnings
+        return ok(body)
     return ok(_serialize_me(user))
+
+
+def _validate_linkedin(value: str | None) -> str | None:
+    from urllib.parse import urlparse
+    value = (value or "").strip()
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not (parsed.hostname or "").endswith("linkedin.com"):
+        raise ValueError("LinkedIn must be an https link on linkedin.com.")
+    return value
 
 
 @api_login_required

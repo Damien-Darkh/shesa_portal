@@ -56,14 +56,13 @@
         <button class="btn btn-primary" type="submit" style="margin-top:0;width:auto;">Save profile</button>
       </form>
 
-            <!-- Access -->
+      <!-- Access -->
       <section class="card space-y" id="access-card">
         <div class="card-header"><h3 class="card-title">Access</h3></div>
         <form id="access-form" class="space-y">
           <label class="checkbox-row"><input type="checkbox" id="f-admin"> Administrator (can manage employees, devices and leave)</label>
           <label class="checkbox-row"><input type="checkbox" id="f-vpn"> VPN access</label>
           <p class="form-hint" id="vpn-note"></p>
-          <label class="checkbox-row"><input type="checkbox" id="f-disabled"> Disabled: deletes all their VPN devices immediately on save</label>
           <button class="btn btn-outline" type="submit">Save access</button>
         </form>
       </section>
@@ -93,9 +92,25 @@
 
       <!-- Danger zone -->
       <section class="card danger-zone space-y" id="danger-card">
-        <div class="card-header"><h3 class="card-title" style="display:flex;align-items:center;gap:.5rem;"><i data-lucide="triangle-alert"></i> Danger zone</h3>
-          <p class="card-subtitle">Permanently deletes this employee, removes every device and their NAS account. Use Disabled above to suspend access temporarily.</p></div>
-        <button type="button" class="btn btn-red" id="delete-btn"><i data-lucide="trash-2"></i> Delete employee</button>
+        <div class="card-header">
+          <h3 class="card-title" style="display:flex;align-items:center;gap:.5rem;"><i data-lucide="triangle-alert"></i> Danger zone</h3>
+        </div>
+        <div class="space-y">
+          <div class="row-between">
+            <div>
+              <p class="value" id="disable-title">Disable employee</p>
+              <p class="card-subtitle" id="disable-desc">Removes their VPN devices, administrator rights and VPN access. The account is kept and can be re-enabled.</p>
+            </div>
+            <button type="button" class="btn btn-red" id="disable-btn"><i data-lucide="user-x"></i> <span id="disable-label">Disable</span></button>
+          </div>
+          <div class="row-between">
+            <div>
+              <p class="value">Delete employee</p>
+              <p class="card-subtitle">Permanently deletes this employee, removes every device and their NAS account. Use Disable to suspend access temporarily.</p>
+            </div>
+            <button type="button" class="btn btn-red" id="delete-btn"><i data-lucide="trash-2"></i> Delete</button>
+          </div>
+        </div>
       </section>
     </div>
   </main>

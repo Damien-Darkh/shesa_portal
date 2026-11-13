@@ -1,4 +1,4 @@
-// Admin: edit one employee (profile, access, VPN, NAS, devices, delete). Changes go straight to the API.
+// Admin: edit one employee (profile, access, VPN, NAS, devices, disable, delete). Changes go straight to the API.
 import { ready, dbData, requireAdmin, getIdParam, fullName, fillDepartmentSelect, showFlash, refreshIcons, t, confirmDialog, fmtDate, renderAvatar, readImageFile, setupBackLink } from '../layout.js';
 import { api } from '../api.js';
 import { refreshPeople } from '../store.js';
@@ -31,8 +31,7 @@ import { refreshPeople } from '../store.js';
 
   /* ---------- Data ---------- */
 
-  // Reloads the employee from the server. Every UI update works from this value,
-  // never from what the user last clicked, so the form always shows the stored state.
+  // Always re-read from the server, so the form shows the stored state.
   const load = async () => {
     user = await api(`/api/admin/users/${id}/`);
     user.profile = user.profile || {};
@@ -55,20 +54,33 @@ import { refreshPeople } from '../store.js';
     lastName: $('f-last').value.trim(),
   });
 
-  // Admins always have VPN. Everyone else reflects the stored vpn_access flag.
-  function renderVpnState() {
+  // Admins always have VPN. Others reflect the stored flag. Disabled accounts have neither.
+  function renderAccessState() {
     const isAdminTarget = !!user.is_admin;
     const entitled = isAdminTarget || !!user.vpn_access;
 
+    $('f-admin').checked = !!user.is_admin;
+    $('f-admin').disabled = !!user.disabled || self;
     $('f-vpn').checked = entitled;
-    $('f-vpn').disabled = isAdminTarget;
+    $('f-vpn').disabled = isAdminTarget || !!user.disabled;
     $('vpn-note').textContent = isAdminTarget
       ? t('Administrators always have VPN access')
       : t("Turning this off disconnects the employee's VPN devices. They can be restored by turning it back on.");
 
-    $('dev-form').querySelectorAll('input, button').forEach(el => { el.disabled = !entitled; });
+    $('dev-form').querySelectorAll('input, button').forEach(el => { el.disabled = !entitled || !!user.disabled; });
     $('dev-hint').textContent = entitled ? '' : t('Enable VPN access for this employee before adding a device.');
     $('dev-hint').hidden = entitled;
+  }
+
+  function renderDisableState() {
+    $('disable-label').textContent = user.disabled ? t('Enable employee') : t('Disable');
+    $('disable-btn').classList.toggle('btn-red', !user.disabled);
+    $('disable-btn').classList.toggle('btn-outline', !!user.disabled);
+    $('disable-title').textContent = user.disabled ? t('Enable employee') : t('Disable employee');
+    $('disable-desc').textContent = user.disabled
+      ? t('The account is active again. Administrator and VPN access must be granted again.')
+      : t('Removes their VPN devices, administrator rights and VPN access. The account is kept and can be re-enabled.');
+    $('disable-btn').disabled = self;
   }
 
   const fill = () => {
@@ -82,9 +94,8 @@ import { refreshPeople } from '../store.js';
     $('f-office').value = p.office_location || '';
     $('f-photo').value = p.photo_url || '';
     $('f-bio').value = p.bio || '';
-    $('f-admin').checked = !!user.is_admin;
-    $('f-disabled').checked = !!user.disabled;
-    renderVpnState();
+    renderAccessState();
+    renderDisableState();
     preview();
   };
 
@@ -163,33 +174,13 @@ import { refreshPeople } from '../store.js';
     }
   });
 
-  /* ---------- Access form (admin, VPN, disabled) ---------- */
+  /* ---------- Access form (administrator, VPN) ---------- */
 
   $('access-form').addEventListener('submit', async e => {
     e.preventDefault();
-
-    const wantDisabled = $('f-disabled').checked;
-    const wantVpn = $('f-vpn').checked;
-
-    // Confirm before disabling, because it permanently deletes VPN devices.
-    if (wantDisabled && !user.disabled) {
-      const ok = await confirmDialog({
-        title: t('Disable employee?'),
-        message: `Disabling ${fullName(user)} permanently deletes all of their VPN devices, from the VPN server and from the portal. They cannot be restored; the devices must be added again after re-enabling.`,
-        confirmText: t('Disable'),
-        danger: true,
-      });
-      if (!ok) {
-        $('f-disabled').checked = false;
-        return;
-      }
-    }
-
     try {
-      const body = { is_admin: $('f-admin').checked, disabled: wantDisabled };
-      // Admins are always entitled, so the flag is only sent for non-admin employees.
-      if (!user.is_admin) body.vpn_access = wantVpn;
-
+      const body = { is_admin: $('f-admin').checked };
+      if (!user.is_admin) body.vpn_access = $('f-vpn').checked;
       const r = await api(`/api/admin/users/${id}/`, { method: 'PATCH', body });
       await refreshAll();
       showFlash(`Saved changes for ${fullName(user)}.`, 'success');
@@ -243,7 +234,28 @@ import { refreshPeople } from '../store.js';
     }
   });
 
-  /* ---------- Danger zone & NAS ---------- */
+  /* ---------- Danger zone: disable / enable, delete ---------- */
+
+  $('disable-btn').addEventListener('click', async () => {
+    const enabling = !!user.disabled;
+    const ok = await confirmDialog({
+      title: enabling ? t('Enable employee?') : t('Disable employee?'),
+      message: enabling
+        ? `Re-enable ${fullName(user)}? Their account becomes active again. Administrator and VPN access are not restored automatically.`
+        : `Disable ${fullName(user)}? Their VPN devices are permanently deleted, from the VPN server and from the portal, and their administrator rights and VPN access are removed. They cannot sign in until re-enabled.`,
+      confirmText: enabling ? t('Enable') : t('Disable'),
+      danger: !enabling,
+    });
+    if (!ok) return;
+    try {
+      const r = await api(`/api/admin/users/${id}/`, { method: 'PATCH', body: { disabled: !enabling } });
+      await refreshAll();
+      showFlash(`${enabling ? 'Enabled' : 'Disabled'} ${fullName(user)}.`, 'success');
+      (r.warnings || []).forEach(w => showFlash(w, 'info'));
+    } catch (error) {
+      showFlash(error.message, 'error');
+    }
+  });
 
   $('delete-btn').addEventListener('click', async () => {
     const devices = (user.devices || []).length;
@@ -264,6 +276,8 @@ import { refreshPeople } from '../store.js';
       showFlash(error.message, 'error');
     }
   });
+
+  /* ---------- NAS ---------- */
 
   $('nas-reset').addEventListener('click', async e => {
     e.preventDefault();

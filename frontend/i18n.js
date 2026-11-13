@@ -170,6 +170,12 @@ const IT = {
   'You have been signed out.': 'Sei uscito dal portale.',
   'Could not start sign-in. Refresh the page or contact IT.': 'Impossibile avviare l\'accesso. Ricarica la pagina o contatta l\'IT.',
   'Sign-in is temporarily unavailable. Contact IT.': 'L\'accesso non è disponibile al momento. Contatta l\'IT.',
+  'Enable employee': 'Riattiva dipendente',
+  'Enable employee?': 'Riattivare il dipendente?',
+  'Enable': 'Riattiva',
+  'Disable employee': 'Disattiva dipendente',
+  'The account is active again. Administrator and VPN access must be granted again.': 'L\'account è di nuovo attivo. Accesso amministratore e VPN devono essere concessi di nuovo.',
+  'Removes their VPN devices, administrator rights and VPN access. The account is kept and can be re-enabled.': 'Rimuove i dispositivi VPN, i diritti di amministratore e l\'accesso VPN. L\'account viene mantenuto e può essere riattivato.',
 };
 
 const PATTERNS = [

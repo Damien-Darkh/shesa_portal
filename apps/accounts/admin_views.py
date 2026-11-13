@@ -11,6 +11,8 @@ from apps.common.audit import record
 from apps.common.http import api_admin_required, error, ok, read_json
 from apps.common.integrations import authentik_manager, mailer, synology_manager, wg_manager
 from apps.common.utils import utcnow
+from apps.common.integrations import sanity_sync
+from apps.common.integrations import sanity_client
 from apps.core.models import Department, UserProfile
 from apps.core.services import profile_dict, reconcile_manager_roles
 from apps.devices.models import Device
@@ -38,6 +40,9 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
         "created_at": user.created_at.isoformat(),
         "profile": profile_dict(user),
         "device_count": Device.objects.filter(user=user, revoked_at__isnull=True).count(),
+        "show_on_website": bool(user.show_on_website),
+        "sanity_pending": bool(user.sanity_pending),
+        "sanity_last_error": user.sanity_last_error,
     }
     if detail:
         from apps.pto.models import LeaveBalance, LeaveRequest
@@ -193,6 +198,16 @@ def users(request):
         "warnings": warnings,
     }, status=201)
 
+def _push_to_sanity(user) -> str | None:
+    """Pushes portal data to the website. Returns a warning for HR if the push did not succeed."""
+    try:
+        sanity_sync.push_user(user)
+    except sanity_sync.PushError as exc:
+        return (
+            "Saved in the portal, but the website is not updated yet. "
+            "It will retry automatically."
+        )
+    return None
 
 @api_admin_required
 @require_http_methods(["GET", "PATCH", "DELETE"])
@@ -218,6 +233,18 @@ def user_detail(request, user_id):
                 warnings.append(f"Authentik account deletion failed: {exc}")
         elif not user.authentik_username:
             warnings.append("No linked Authentik account on record; remove it there manually if one exists.")
+        if user.sanity_id:
+            try:
+                sanity_client.mutate([
+                    {
+                        "patch": {
+                            "id": user.sanity_id,
+                            "set": {"showOnWebsite": False},
+                        }
+                    }
+                ])
+            except sanity_client.SanityError as exc:
+                warnings.append(f"Website card not hidden yet: {exc}")
         email, uid = user.email, user.id
         user.delete()
         record(request, "DELETE", "user", uid, details={"email": email})
@@ -251,7 +278,11 @@ def user_detail(request, user_id):
     if "disabled" in data and user.id != request.user.id:
         now_disabled = bool(data["disabled"])
         if now_disabled and not user.disabled:
+            # Disabling removes VPN devices, administrator rights and VPN access.
             warnings += delete_all_devices(user)
+            user.is_admin = False
+            user.vpn_access = False
+            changed += ["is_admin", "vpn_access"]
         user.disabled = now_disabled
         changed.append("disabled")
 
@@ -276,12 +307,20 @@ def user_detail(request, user_id):
     if "department_id" in data:
         changed.append("department")
 
+    if "show_on_website" in data:
+        user.show_on_website = bool(data["show_on_website"])
+        changed.append("show_on_website")
+
     user.save()
     lost = reconcile_manager_roles(user) if "department_id" in data else []
     record(request, "UPDATE", "user", user.id, details={"fields": changed})
 
+    sanity_warning = _push_to_sanity(user)
+
     body = _serialize_user(user, detail=True)
     body["warnings"] = warnings + [f"No longer manages: {name}." for name in lost]
+    if sanity_warning:
+        body["warnings"].append(sanity_warning)
     return ok(body)
 
 
@@ -293,7 +332,10 @@ def toggle_disabled(request, user_id):
         return error(422, "You can't disable your own account.")
     warnings = []
     if not user.disabled:
+        # Disabling removes VPN devices, administrator rights and VPN access.
         warnings += delete_all_devices(user)
+        user.is_admin = False
+        user.vpn_access = False
     user.disabled = not user.disabled
     user.save()
     if settings.AUTHENTIK_API_URL and user.authentik_username:
@@ -302,7 +344,7 @@ def toggle_disabled(request, user_id):
         except authentik_manager.AuthentikApiError as exc:
             warnings.append(f"Portal status changed, but Authentik account was not updated: {exc}")
     record(request, "UPDATE", "user", user.id, details={"disabled": user.disabled})
-    body = _serialize_user(user)
+    body = _serialize_user(user, detail=True)
     body["warnings"] = warnings
     return ok(body)
 
