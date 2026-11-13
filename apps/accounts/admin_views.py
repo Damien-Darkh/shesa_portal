@@ -9,18 +9,17 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 
 from apps.common.audit import record
 from apps.common.http import api_admin_required, error, ok, read_json
-from apps.common.integrations import authentik_manager, mailer, synology_manager
+from apps.common.integrations import authentik_manager, mailer, synology_manager, wg_manager
 from apps.common.utils import utcnow
-from apps.core.models import UserProfile
-from apps.core.models import Department
+from apps.core.models import Department, UserProfile
 from apps.core.services import profile_dict, reconcile_manager_roles
 from apps.devices.models import Device
-from apps.devices.services import sync_devices_to_disabled_state
-from apps.common.integrations import wg_manager
+from apps.devices.services import can_use_vpn, delete_all_devices, set_vpn_access
 
 from .models import AuditLog, Role, User
 
 NAS_PASSWORD_TTL = timedelta(minutes=15)
+PROFILE_FIELDS = ("job_title", "phone", "office_location", "bio", "photo_url", "start_date")
 
 
 def _serialize_user(user: User, detail: bool = False) -> dict:
@@ -32,13 +31,17 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
         "full_name": user.full_name,
         "is_admin": user.is_admin,
         "disabled": user.disabled,
+        "vpn_access": bool(user.vpn_access),
+        "can_use_vpn": can_use_vpn(user),
         "nas_account": user.dsm_username,
         "authentik_account": user.authentik_username,
         "created_at": user.created_at.isoformat(),
+        "profile": profile_dict(user),
+        "device_count": Device.objects.filter(user=user, revoked_at__isnull=True).count(),
     }
-    data["profile"] = profile_dict(user)
     if detail:
         from apps.pto.models import LeaveBalance, LeaveRequest
+
         data["roles"] = [r.name for r in user.roles.all()]
         data["dsm_must_change_password"] = bool(user.dsm_must_change_password)
         data["leave_balances"] = [
@@ -60,9 +63,6 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
             for d in Device.objects.filter(user=user)
         ]
     return data
-
-
-PROFILE_FIELDS = ("job_title", "phone", "office_location", "bio", "photo_url", "start_date")
 
 
 def _apply_profile(user, data) -> str | None:
@@ -98,11 +98,9 @@ def _nas_username(email: str) -> str:
 
 
 def _provision_authentik(user: User, first_name, last_name, make_admin: bool) -> tuple[str | None, str | None]:
-    """Creates the Authentik sign-in account and returns (username, temporary
-    password). Returns (None, None) if the integration isn't configured."""
     if not settings.AUTHENTIK_API_URL:
         return None, None
-    username = _nas_username(user.email)  # same sanitizing rules work for both
+    username = _nas_username(user.email)
     if authentik_manager.user_exists(username):
         return None, None
     _pk, password = authentik_manager.create_user(
@@ -114,7 +112,6 @@ def _provision_authentik(user: User, first_name, last_name, make_admin: bool) ->
 
 
 def _provision_nas(user: User, first_name, last_name, make_admin: bool) -> tuple[str | None, str | None]:
-    """Creates the NAS account and returns (username, temporary password). Returns (None, None) if disabled."""
     if not settings.DSM_URL:
         return None, None
     group = synology_manager.DSM_ADMIN_GROUP if make_admin else synology_manager.DSM_SHARE_GROUP
@@ -126,7 +123,7 @@ def _provision_nas(user: User, first_name, last_name, make_admin: bool) -> tuple
     )
     user.dsm_username = username
     user.dsm_password_token = secrets.token_urlsafe(32)
-    user.dsm_temp_password = None  # never stored: returned to the admin once below
+    user.dsm_temp_password = None
     user.dsm_password_expires_at = utcnow() + NAS_PASSWORD_TTL
     user.dsm_must_change_password = True
     user.save()
@@ -156,11 +153,15 @@ def users(request):
     if User.objects.filter(email=email).exists():
         return error(409, f"{email} already has an account.")
 
-    user = User.objects.create(email=email, is_admin=make_admin, first_name=first_name, last_name=last_name)
+    user = User.objects.create(
+        email=email, is_admin=make_admin, first_name=first_name, last_name=last_name,
+        vpn_access=bool(data.get("vpn_access")) and not make_admin,
+    )
     profile_error = _apply_profile(user, data)
     if profile_error:
         user.delete()
         return error(422, profile_error)
+
     warnings, nas_username, temp_password = [], None, None
     try:
         nas_username, temp_password = _provision_nas(user, first_name, last_name, make_admin)
@@ -179,7 +180,7 @@ def users(request):
                 recipient_email=email, username=nas_username, passphrase=temp_password,
                 first_name=first_name, last_name=last_name,
             )
-        except Exception as exc:  # mail is best effort
+        except Exception as exc:
             warnings.append(f"Welcome email failed: {exc}")
 
     record(request, "CREATE", "user", user.id, details={
@@ -187,9 +188,9 @@ def users(request):
     })
     return ok({
         "user": _serialize_user(user, detail=True),
-        "nas_temporary_password": temp_password,  # shown once; not persisted
+        "nas_temporary_password": temp_password,
         "authentik_username": authentik_username,
-        "authentik_temporary_password": authentik_temp_password,  # shown once; not persisted
+        "authentik_temporary_password": authentik_temp_password,
         "warnings": warnings,
     }, status=201)
 
@@ -205,30 +206,19 @@ def user_detail(request, user_id):
     if request.method == "DELETE":
         if user.id == request.user.id:
             return error(422, "You can't delete your own account.")
-        for device in list(user.devices.all()):
-            try:
-                wg_manager.delete_peer(device.wg_uuid)
-            except wg_manager.WgApiError:
-                pass
-            device.delete()
-        # Authentik is the sign-in gate, so remove it first and fail closed:
-        # if it can't be removed, keep the portal record so the admin can retry,
-        # instead of leaving an active sign-in behind.
-        if settings.AUTHENTIK_API_URL:
-            try:
-                removed = authentik_manager.delete_account(user.authentik_username, user.email)
-            except authentik_manager.AuthentikApiError as exc:
-                return error(502, f"The employee was not deleted because their Authentik sign-in could not be removed. Nothing was changed. Try again. Details: {exc}")
-        else:
-            removed = 0
-        warnings = []
-        if not removed and settings.AUTHENTIK_API_URL:
-            warnings.append("No Authentik sign-in account was found for this employee.")
+        warnings = delete_all_devices(user)
         if settings.DSM_URL and user.dsm_username:
             try:
                 synology_manager.delete_user(user.dsm_username)
             except synology_manager.DsmApiError as exc:
                 warnings.append(f"NAS account deletion failed: {exc}")
+        if settings.AUTHENTIK_API_URL and user.authentik_username:
+            try:
+                authentik_manager.delete_user(user.authentik_username)
+            except authentik_manager.AuthentikApiError as exc:
+                warnings.append(f"Authentik account deletion failed: {exc}")
+        elif not user.authentik_username:
+            warnings.append("No linked Authentik account on record; remove it there manually if one exists.")
         email, uid = user.email, user.id
         user.delete()
         record(request, "DELETE", "user", uid, details={"email": email})
@@ -239,7 +229,9 @@ def user_detail(request, user_id):
     except ValueError as exc:
         return error(400, str(exc))
 
-    changed = []
+    warnings: list[str] = []
+    changed: list[str] = []
+
     if "email" in data:
         new_email = (data["email"] or "").strip().lower()
         if not new_email or "@" not in new_email:
@@ -248,18 +240,30 @@ def user_detail(request, user_id):
             return error(409, f"{new_email} is already in use by another account.")
         user.email = new_email
         changed.append("email")
+
     for name in ("first_name", "last_name"):
         if name in data:
             setattr(user, name, (data[name] or "").strip() or None)
             changed.append(name)
+
     if "is_admin" in data and user.id != request.user.id:
         user.is_admin = bool(data["is_admin"])
         changed.append("is_admin")
+
     if "disabled" in data and user.id != request.user.id:
-        was_disabled, now_disabled = user.disabled, bool(data["disabled"])
-        sync_devices_to_disabled_state(user, was_disabled, now_disabled)
+        now_disabled = bool(data["disabled"])
+        if now_disabled and not user.disabled:
+            warnings += delete_all_devices(user)
         user.disabled = now_disabled
         changed.append("disabled")
+
+    if "vpn_access" in data and not user.is_admin:
+        want_vpn = bool(data["vpn_access"])
+        if want_vpn != bool(user.vpn_access):
+            user.vpn_access = want_vpn
+            changed.append("vpn_access")
+            warnings += set_vpn_access(user, want_vpn)
+
     if "roles" in data:
         names = data["roles"] or []
         roles = list(Role.objects.filter(name__in=names))
@@ -273,11 +277,13 @@ def user_detail(request, user_id):
         return error(422, profile_error)
     if "department_id" in data:
         changed.append("department")
+
     user.save()
     lost = reconcile_manager_roles(user) if "department_id" in data else []
     record(request, "UPDATE", "user", user.id, details={"fields": changed})
+
     body = _serialize_user(user, detail=True)
-    body["warnings"] = [f"No longer manages: {name}." for name in lost]
+    body["warnings"] = warnings + [f"No longer manages: {name}." for name in lost]
     return ok(body)
 
 
@@ -287,16 +293,14 @@ def toggle_disabled(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if user.id == request.user.id:
         return error(422, "You can't disable your own account.")
-    was_disabled = user.disabled
-    user.disabled = not user.disabled
-    sync_devices_to_disabled_state(user, was_disabled, user.disabled)
-    user.save()
     warnings = []
-    if settings.AUTHENTIK_API_URL:
+    if not user.disabled:
+        warnings += delete_all_devices(user)
+    user.disabled = not user.disabled
+    user.save()
+    if settings.AUTHENTIK_API_URL and user.authentik_username:
         try:
-            updated = authentik_manager.set_active(user.authentik_username, user.email, active=not user.disabled)
-            if not updated:
-                warnings.append("No Authentik sign-in account was found for this employee.")
+            authentik_manager.set_active(user.authentik_username, active=not user.disabled)
         except authentik_manager.AuthentikApiError as exc:
             warnings.append(f"Portal status changed, but Authentik account was not updated: {exc}")
     record(request, "UPDATE", "user", user.id, details={"disabled": user.disabled})
