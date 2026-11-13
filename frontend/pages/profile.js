@@ -95,8 +95,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const available = projectCatalog.filter(p => !chosen.includes(p.id));
 
     const sel = $('project-select');
+    const placeholder = !projectCatalog.length
+      ? t('No projects found on the website')
+      : available.length
+        ? t('Choose a project')
+        : t('No more projects to add');
     sel.replaceChildren(
-      new Option(available.length ? t('Choose a project') : t('No more projects to add'), ''),
+      new Option(placeholder, ''),
       ...available.map(p => new Option(p.title, p.id)),
     );
     sel.disabled = !available.length;
