@@ -10,11 +10,19 @@ import { ready, dbData, refreshIcons, esc, t } from '../layout.js';
   function render(query = '') {
     const q = query.trim().toLowerCase();
     const filtered = dbData.usersDirectory.filter(u => !u.disabled
+      // Exclude Authentik Default Admin
+      && !(
+        (u.email || '').trim().toLowerCase() === 'admin@shesa.local'
+        || (
+          (u.last_name || '').trim().toLowerCase() === 'default admin'
+          && (u.first_name || '').trim().toLowerCase().includes('authentik')
+        )
+      )
       && (!deptSel.value || String(u.profile.department_id) === deptSel.value)
       && (`${u.first_name} ${u.last_name}`.toLowerCase().includes(q)
-        || u.email.toLowerCase().includes(q)
+        || (u.email || '').toLowerCase().includes(q)
         || (u.profile.job_title || '').toLowerCase().includes(q)));
-
+        
     dirGrid.innerHTML = !filtered.length
       ? `<p class="card-subtitle" role="status">${esc(t('No results found.'))}</p>`
       : filtered.map(u => `

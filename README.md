@@ -24,6 +24,8 @@ PostgreSQL must be reachable with the `DB_*` variables.
 ```bash
 cp .env.example .env            # DJANGO_SECRET_KEY, DB_PASSWORD, OIDC_*, OPNSENSE_*, ...
 docker compose up -d --build
+docker compose up -d --build web
+docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --build
 ```
 
 ## Sign-in (OIDC via Authentik)

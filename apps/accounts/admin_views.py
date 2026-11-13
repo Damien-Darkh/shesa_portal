@@ -187,9 +187,18 @@ def users(request):
         except Exception as exc:
             warnings.append(f"Welcome email failed: {exc}")
 
+    # Synchronize the newly created employee with Sanity.
+    sanity_warning = _push_to_sanity(user)
+    if sanity_warning:
+        warnings.append(sanity_warning)
+
     record(request, "CREATE", "user", user.id, details={
-        "email": email, "nas": bool(nas_username), "authentik": bool(authentik_username),
+        "email": email,
+        "nas": bool(nas_username),
+        "authentik": bool(authentik_username),
+        "sanity": bool(user.sanity_id),
     })
+
     return ok({
         "user": _serialize_user(user, detail=True),
         "nas_temporary_password": temp_password,

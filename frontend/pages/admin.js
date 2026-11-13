@@ -7,7 +7,9 @@ import { api, ApiError } from '../api.js';
   if (!requireAdmin()) return;
   const me = dbData.currentUser;
   const $ = id => document.getElementById(id);
-  const users = dbData.usersDirectory || [];
+  const users = (dbData.usersDirectory || []).filter(u =>
+    (u.email || '').trim().toLowerCase() !== 'admin@shesa.local'
+  );
   const kind = s => s === 'PENDING' ? 'pending' : s === 'DENIED' ? 'denied' : s === 'CANCELLED' ? 'cancelled' : 'approved';
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const label = { pending: 'Pending', denied: 'Denied', approved: 'Approved', cancelled: 'Cancelled' };

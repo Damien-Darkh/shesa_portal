@@ -1,6 +1,6 @@
 // My profile: contact details and website profile are editable by the employee.
 // Job details are read-only (HR manages them). Publishing on the website needs explicit consent.
-import { ready, dbData, showFlash, getLang, setLang, refreshIcons, t } from '../layout.js';
+import { ready, dbData, showFlash, getLang, setLang, refreshIcons, renderAvatar, t } from '../layout.js';
 import { api } from '../api.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
