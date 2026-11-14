@@ -24,6 +24,7 @@ export async function refreshMe() {
     vpn_access: !!me.vpn_access, can_use_vpn: !!me.can_use_vpn,
     dsm_username: me.dsm_username, dsm_must_change_password: me.dsm_must_change_password,
     roles: (me.roles || []).map(name => ({ name })), profile: me.profile, devices,
+    identity_id: me.identity_id,
   };
   try { localStorage.setItem('portal.lang', me.language || 'it'); } catch { /* storage unavailable */ }
   return dbData.currentUser;

@@ -88,6 +88,13 @@ def _random_password(username: str, length: int = 20) -> str:
         ):
             return pwd
 
+def _find_user_pk(username: str) -> str:
+    """Returns the Authentik pk (UUID) of the account with this exact username."""
+    data = _request("GET", "/api/v3/core/users/", params={"username": username})
+    results = data.get("results") or []
+    if not results:
+        raise AuthentikApiError(f"No Authentik account found for username '{username}'.")
+    return results[0]["pk"]
 
 def _find_group_pk(name: str) -> str | None:
     """Looks up a group's pk (a UUID) by its exact name. Returns None if
@@ -144,8 +151,8 @@ def create_user(
 
 
 def reset_password(username: str) -> str:
-    """Admin action: generates a new random password for an existing
-    Authentik user and sets it. Returns the new password."""
+    """Admin action: generates a new random password for an existing Authentik user and sets it.
+    Returns the new password."""
     pk = _find_user_pk(username)
     password = _random_password(username, 20)
     _request("POST", f"/api/v3/core/users/{pk}/set_password/", json={"password": password})

@@ -69,7 +69,7 @@ import { api, ApiError } from '../api.js';
     + pill(u.disabled ? 'status--off' : 'status--active', `<span class="pulse"></span>${u.disabled ? 'Disabled' : 'Active'}`);
 
   $('adm-account').innerHTML =
-    kv('User ID', mono(String(u.id))) + kv('Role', u.is_admin ? 'Admin' : 'Staff') +
+    kv('Identity ID', mono(detail.identity_id || 'Not assigned')) +
     kv('Status', u.disabled ? 'Disabled' : 'Active') + kv('Created', dt(detail.created_at)) +
     kv('Last profile update', dt(p.updated_at)) +
     kv('NAS username', detail.nas_account ? mono(detail.nas_account) : 'Not provisioned') +

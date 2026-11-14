@@ -1,18 +1,19 @@
-"""Administrator endpoints: employee lifecycle, NAS provisioning, roles, audit log."""
+"""Administrator endpoints: employee lifecycle, NAS and Authentik provisioning, roles, audit log."""
 import re
 import secrets
 from datetime import date, timedelta
 
 from django.conf import settings
+from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
+from apps.common import identity_id as identity_gen
 from apps.common.audit import record
 from apps.common.http import api_admin_required, error, ok, read_json
-from apps.common.integrations import authentik_manager, mailer, synology_manager, wg_manager
+from apps.common.integrations import authentik_manager, mailer, synology_manager
+from apps.common.integrations import sanity_client, sanity_sync
 from apps.common.utils import utcnow
-from apps.common.integrations import sanity_sync
-from apps.common.integrations import sanity_client
 from apps.core.models import Department, UserProfile
 from apps.core.services import profile_dict, reconcile_manager_roles
 from apps.devices.models import Device
@@ -22,7 +23,10 @@ from .models import AuditLog, Role, User
 
 NAS_PASSWORD_TTL = timedelta(minutes=15)
 PROFILE_FIELDS = ("job_title", "phone", "office_location", "bio", "photo_url", "start_date")
+DISPLAY_ORDER_STEP = 10
 
+
+# ---------------------------------------------------------------- helpers
 
 def _serialize_user(user: User, detail: bool = False) -> dict:
     data = {
@@ -37,6 +41,8 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
         "can_use_vpn": can_use_vpn(user),
         "nas_account": user.dsm_username,
         "authentik_account": user.authentik_username,
+        "identity_id": user.identity_id,
+        "display_order": user.display_order,
         "created_at": user.created_at.isoformat(),
         "profile": profile_dict(user),
         "device_count": Device.objects.filter(user=user, revoked_at__isnull=True).count(),
@@ -91,10 +97,55 @@ def _apply_profile(user, data) -> str | None:
                 value = date.fromisoformat(value)
             except ValueError:
                 return "Invalid start_date (use YYYY-MM-DD)."
-        if field == "photo_url" and value and len(value) > 350_000:
-            return "Photo is too large (max 300 KB)."
+        if field == "photo_url" and value and len(value) > 450_000:
+            return "Photo is too large (max 400 KB)."
         setattr(profile, field, value)
     profile.save()
+    return None
+
+
+def _apply_display_order(user, data) -> str | None:
+    """Sets display_order from the request. Empty clears it. Returns an error message or None."""
+    raw = data["display_order"]
+    if raw in (None, ""):
+        user.display_order = None
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return "Display order must be a whole number."
+    if value < 0:
+        return "Display order cannot be negative."
+    user.display_order = value
+    return None
+
+
+def _next_display_order() -> int:
+    """Next free slot in steps of 10, so people can be inserted later without renumbering."""
+    last = User.objects.aggregate(m=Max("display_order"))["m"] or 0
+    return last + DISPLAY_ORDER_STEP
+
+
+def _assign_identity_id(user) -> str | None:
+    """Gives the user an identity ID once. Never overwrites an existing ID.
+
+    Generated from the first and last name and the mobile number on the profile.
+    Returns a warning message if no ID could be created, otherwise None.
+    """
+    if user.identity_id:
+        return None
+    profile = getattr(user, "profile", None)
+    phone = profile.phone if profile else None
+    if not phone:
+        return "No identity ID yet: add a mobile number to the profile to generate one."
+    try:
+        user.identity_id = identity_gen.generate(
+            user.first_name or "", user.last_name or "", phone,
+            exists=lambda c: User.objects.filter(identity_id=c).exclude(pk=user.pk).exists(),
+        )
+    except identity_gen.IdentityIdError as exc:
+        return f"Identity ID not created: {exc}"
+    user.save(update_fields=["identity_id"])
     return None
 
 
@@ -135,6 +186,18 @@ def _provision_nas(user: User, first_name, last_name, make_admin: bool) -> tuple
     return username, temp
 
 
+def _push_to_sanity(user) -> str | None:
+    if not sanity_sync.is_enabled():
+        return None  # sync off: no warning, the employee is simply not on the website yet
+    try:
+        sanity_sync.push_user(user)
+    except sanity_sync.PushError as exc:
+        return f"Saved in the portal, but the website is not updated: {exc}"
+    return None
+
+
+# ---------------------------------------------------------------- collection
+
 @api_admin_required
 @require_http_methods(["GET", "POST"])
 def users(request):
@@ -149,6 +212,7 @@ def users(request):
         data = read_json(request)
     except ValueError as exc:
         return error(400, str(exc))
+
     email = (data.get("email") or "").strip().lower()
     first_name = (data.get("first_name") or "").strip() or None
     last_name = (data.get("last_name") or "").strip() or None
@@ -161,12 +225,20 @@ def users(request):
     user = User.objects.create(
         email=email, is_admin=make_admin, first_name=first_name, last_name=last_name,
         vpn_access=bool(data.get("vpn_access")) and not make_admin,
+        display_order=_next_display_order(),
     )
     profile_error = _apply_profile(user, data)
     if profile_error:
         user.delete()
         return error(422, profile_error)
-    warnings, nas_username, temp_password = [], None, None
+
+    warnings: list[str] = []
+
+    identity_warning = _assign_identity_id(user)
+    if identity_warning:
+        warnings.append(identity_warning)
+
+    nas_username, temp_password = None, None
     try:
         nas_username, temp_password = _provision_nas(user, first_name, last_name, make_admin)
     except synology_manager.DsmApiError as exc:
@@ -174,7 +246,8 @@ def users(request):
 
     authentik_username, authentik_temp_password = None, None
     try:
-        authentik_username, authentik_temp_password = _provision_authentik(user, first_name, last_name, make_admin)
+        authentik_username, authentik_temp_password = _provision_authentik(
+            user, first_name, last_name, make_admin)
     except authentik_manager.AuthentikApiError as exc:
         warnings.append(f"Portal account created, but Authentik sign-in account failed: {exc}")
 
@@ -187,13 +260,13 @@ def users(request):
         except Exception as exc:
             warnings.append(f"Welcome email failed: {exc}")
 
-    # Synchronize the newly created employee with Sanity.
     sanity_warning = _push_to_sanity(user)
     if sanity_warning:
         warnings.append(sanity_warning)
 
     record(request, "CREATE", "user", user.id, details={
         "email": email,
+        "identity_id": user.identity_id,
         "nas": bool(nas_username),
         "authentik": bool(authentik_username),
         "sanity": bool(user.sanity_id),
@@ -207,15 +280,8 @@ def users(request):
         "warnings": warnings,
     }, status=201)
 
-def _push_to_sanity(user) -> str | None:
-    if not sanity_sync.is_enabled():
-        return ("Website sync is off (check SANITY_SYNC_ENABLED, SANITY_PROJECT_ID, "
-                "SANITY_WRITE_TOKEN). This employee is not on the website.")
-    try:
-        sanity_sync.push_user(user)
-    except sanity_sync.PushError as exc:
-        return f"Saved in the portal, but the website is not updated: {exc}"
-    return None
+
+# ---------------------------------------------------------------- one employee
 
 @api_admin_required
 @require_http_methods(["GET", "PATCH", "DELETE"])
@@ -226,41 +292,7 @@ def user_detail(request, user_id):
         return ok(_serialize_user(user, detail=True))
 
     if request.method == "DELETE":
-        if user.id == request.user.id:
-            return error(422, "You can't delete your own account.")
-        warnings = delete_all_devices(user)
-        if settings.DSM_URL and user.dsm_username:
-            try:
-                synology_manager.delete_user(user.dsm_username)
-            except synology_manager.DsmApiError as exc:
-                warnings.append(f"NAS account deletion failed: {exc}")
-        if settings.AUTHENTIK_API_URL and (user.authentik_username or user.email):
-            try:
-                authentik_manager.delete_account(user.authentik_username, user.email)
-            except authentik_manager.AuthentikApiError as exc:
-                warnings.append(f"Authentik account deletion failed: {exc}")
-        elif not user.authentik_username:
-            warnings.append("No linked Authentik account on record; remove it there manually if one exists.")
-        if user.sanity_id:
-            try:
-                sanity_client.mutate([
-                    {
-                        "patch": {
-                            "id": user.sanity_id,
-                            "set": {"showOnWebsite": False},
-                        }
-                    }
-                ])
-            except sanity_client.SanityError as exc:
-                warnings.append(f"Website card not hidden yet: {exc}")
-        email, uid = user.email, user.id
-        try:
-            sanity_sync.hide_person(user)
-        except (sanity_client.SanityError, sanity_sync.PushError) as exc:
-            warnings.append(f"Website card not hidden yet: {exc}")
-        user.delete()
-        record(request, "DELETE", "user", uid, details={"email": email})
-        return ok({"deleted": True, "warnings": warnings})
+        return _delete_user(request, user)
 
     try:
         data = read_json(request)
@@ -278,10 +310,17 @@ def user_detail(request, user_id):
             return error(409, f"{new_email} is already in use by another account.")
         user.email = new_email
         changed.append("email")
+
     for name in ("first_name", "last_name"):
         if name in data:
             setattr(user, name, (data[name] or "").strip() or None)
             changed.append(name)
+
+    if "display_order" in data:
+        problem = _apply_display_order(user, data)
+        if problem:
+            return error(422, problem)
+        changed.append("display_order")
 
     if "is_admin" in data and user.id != request.user.id:
         user.is_admin = bool(data["is_admin"])
@@ -326,6 +365,13 @@ def user_detail(request, user_id):
         changed.append("show_on_website")
 
     user.save()
+
+    # The identity ID is assigned only when missing. An existing ID is never changed here.
+    if not user.identity_id:
+        identity_warning = _assign_identity_id(user)
+        if identity_warning:
+            warnings.append(identity_warning)
+
     lost = reconcile_manager_roles(user) if "department_id" in data else []
     record(request, "UPDATE", "user", user.id, details={"fields": changed})
 
@@ -338,29 +384,97 @@ def user_detail(request, user_id):
     return ok(body)
 
 
+def _delete_user(request, user):
+    if user.id == request.user.id:
+        return error(422, "You can't delete your own account.")
+
+    # 1. Sign-in account. If it can't be removed, the employee is kept, so a live
+    #    sign-in can't recreate them on next login.
+    if settings.AUTHENTIK_API_URL and (user.authentik_username or user.email):
+        try:
+            authentik_manager.delete_account(user.authentik_username, user.email)
+        except authentik_manager.AuthentikApiError as exc:
+            return error(502, "Could not remove the Authentik sign-in account, so the employee "
+                              f"was not deleted: {exc}")
+
+    # 2. Website record. Hidden, detached from projects, then deleted. If this fails the
+    #    employee is kept; the website page is already hidden, and the delete can be retried.
+    try:
+        sanity_sync.delete_person(user)
+    except (sanity_client.SanityError, sanity_sync.PushError) as exc:
+        return error(502, "Could not remove the website record, so the employee was not deleted. "
+                          f"Their website page has been hidden. Retry the delete after fixing: {exc}")
+
+    # 3. Local data.
+    warnings: list[str] = []
+    warnings += delete_all_devices(user)
+
+    if settings.DSM_URL and user.dsm_username:
+        try:
+            synology_manager.delete_user(user.dsm_username)
+        except synology_manager.DsmApiError as exc:
+            warnings.append(f"NAS account deletion failed: {exc}")
+
+    email, uid = user.email, user.id
+    user.delete()
+    record(request, "DELETE", "user", uid, details={"email": email})
+    return ok({"deleted": True, "warnings": warnings})
+
+
+@api_admin_required
+@require_POST
+def identity_id_replace(request, user_id):
+    """The only way to change an identity ID. Requires a reason and writes an audit entry."""
+    user = get_object_or_404(User, pk=user_id)
+    try:
+        data = read_json(request)
+    except ValueError as exc:
+        return error(400, str(exc))
+    reason = (data.get("reason") or "").strip()
+    if not reason:
+        return error(422, "A reason is required to replace an identity ID.")
+
+    old = user.identity_id
+    user.identity_id = None
+    warning = _assign_identity_id(user)
+    if warning or not user.identity_id:
+        user.identity_id = old
+        user.save(update_fields=["identity_id"])
+        return error(422, warning or "No new identity ID could be created.")
+
+    record(request, "UPDATE", "identity_id", user.id,
+           details={"old": old, "new": user.identity_id, "reason": reason})
+    return ok({"identity_id": user.identity_id})
+
+
 @api_admin_required
 @require_POST
 def toggle_disabled(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     if user.id == request.user.id:
         return error(422, "You can't disable your own account.")
-    warnings = []
+
+    warnings: list[str] = []
     if not user.disabled:
-        # Disabling removes VPN devices, administrator rights and VPN access.
         warnings += delete_all_devices(user)
         user.is_admin = False
         user.vpn_access = False
-    try:
-        sanity_sync.hide_person(user)
-    except (sanity_client.SanityError, sanity_sync.PushError) as exc:
-        warnings.append(f"Website card not hidden yet: {exc}")
-    user.disabled = not user.disabled
-    user.save()
+        user.disabled = True
+        user.save()
+        try:
+            sanity_sync.hide_person(user)
+        except (sanity_client.SanityError, sanity_sync.PushError) as exc:
+            warnings.append(f"Website card not hidden yet: {exc}")
+    else:
+        user.disabled = False
+        user.save()
+
     if settings.AUTHENTIK_API_URL and user.authentik_username:
         try:
             authentik_manager.set_active(user.authentik_username, active=not user.disabled)
         except authentik_manager.AuthentikApiError as exc:
             warnings.append(f"Portal status changed, but Authentik account was not updated: {exc}")
+
     record(request, "UPDATE", "user", user.id, details={"disabled": user.disabled})
     body = _serialize_user(user, detail=True)
     body["warnings"] = warnings
@@ -408,9 +522,11 @@ def reset_authentik_password(request, user_id):
         new_password = authentik_manager.reset_password(user.authentik_username)
     except authentik_manager.AuthentikApiError as exc:
         return error(502, f"Could not reset Authentik password: {exc}")
+    except Exception as exc:
+        logger.exception("Unexpected error resetting Authentik password for user %s", user.id)
+        return error(502, f"Could not reset Authentik password. Check the server log: {exc}")
     record(request, "UPDATE", "authentik_password", user.id, details={"reset_by_admin": True})
     return ok({"authentik_temporary_password": new_password})
-
 
 @api_admin_required
 @require_GET

@@ -20,13 +20,13 @@ const ensureCsrf = () => (csrfReady ??= fetch('/api/csrf/', { credentials: 'same
 
 export async function api(path, { method = 'GET', body } = {}) {
   const headers = { Accept: 'application/json' };
+  const isForm = body instanceof FormData;
+
   if (method !== 'GET' && method !== 'HEAD') {
     await ensureCsrf();
     headers['X-CSRFToken'] = cookie('csrftoken');
   }
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-
-  const isForm = body instanceof FormData;
+  // JSON needs an explicit type. FormData must not set one: the browser adds the multipart boundary itself.
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
 
   const res = await fetch(path, {

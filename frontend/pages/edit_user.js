@@ -41,7 +41,7 @@ import { refreshPeople } from '../store.js';
 
   const header = () => {
     $('eu-name').textContent = fullName(user);
-    $('eu-email').textContent = user.email;
+    $('eu-email').textContent = `${user.email} · ${user.identity_id || 'no identity ID yet'}`;
     $('eu-status').innerHTML =
       `<span class="status ${user.disabled ? 'status--off' : 'status--active'}">` +
       `<span class="pulse"></span>${user.disabled ? t('Disabled') : t('Active')}` +

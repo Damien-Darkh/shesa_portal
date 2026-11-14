@@ -15,7 +15,7 @@ import { refreshMe } from '../store.js';
   $('welcome-title').textContent = `Welcome back, ${user.first_name}`;
   $('profile-fullname').textContent = `${user.first_name} ${user.last_name}`;
   $('profile-job').textContent = user.profile.job_title || '';
-  $('profile-id').textContent = `User ID: ${user.id}`;
+  $('profile-id').textContent = `Identity ID: ${user.identity_id || '—'}`;
   $('profile-role-badge').textContent = user.is_admin ? 'ADMIN' : 'STAFF';
   $('p-email').textContent = user.email;
   $('p-phone').textContent = user.profile.phone || '—';

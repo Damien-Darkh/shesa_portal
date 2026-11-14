@@ -16,33 +16,79 @@ import { api, ApiError } from '../api.js';
 
   /* ---------- Employees ---------- */
   function renderEmployees() {
-    const tbody = $('users-tbody'); tbody.replaceChildren();
+    const tbody = $('users-tbody');
+    tbody.replaceChildren();
+
     if (!users.length) {
-      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><i data-lucide="inbox"></i><span>No employees yet. Add one to get started.</span></div></td></tr>';
-      return refreshIcons();
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.innerHTML = '<div class="empty-state"><i data-lucide="inbox"></i><span>No employees yet. Add one to get started.</span></div>';
+      tr.append(td);
+      tbody.append(tr);
+      refreshIcons();
+      return;
     }
+
     users.forEach(u => {
       const tr = document.createElement('tr');
+      tr.dataset.href = `person.html?id=${u.id}`;
+      tr.style.cursor = 'pointer';
+
+      // Name, avatar and job title
       const tdName = document.createElement('td');
-      const wrap = document.createElement('div'); wrap.className = 'name-cell';
-      const avatar = document.createElement('div'); avatar.className = 'avatar-box avatar-sm';
-      renderAvatar(avatar, { photoUrl: u.profile?.photo_url, firstName: u.first_name, lastName: u.last_name });
+      const wrap = document.createElement('div');
+      wrap.className = 'name-cell';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar-box avatar-sm';
+      renderAvatar(avatar, {
+        photoUrl: u.profile?.photo_url,
+        firstName: u.first_name,
+        lastName: u.last_name,
+      });
+
       const text = document.createElement('div');
-      const name = document.createElement('div');
-      const nameLink = document.createElement('a'); nameLink.href = `person.html?id=${u.id}`; nameLink.textContent = fullName(u) === u.email ? '—' : fullName(u);
-      name.append(nameLink);
-      const job = document.createElement('div'); job.className = 'form-hint'; job.style.margin = '0'; job.textContent = u.profile?.job_title || '';
-      text.append(name, job); wrap.append(avatar, text); tdName.append(wrap);
-      const tdEmail = document.createElement('td'); tdEmail.textContent = u.email;
+      const nameLine = document.createElement('div');
+      const nameLink = document.createElement('a');
+      nameLink.href = `person.html?id=${u.id}`;
+      nameLink.textContent = (u.first_name || u.last_name) ? fullName(u) : '—';
+      nameLine.append(nameLink);
+
+      const job = document.createElement('div');
+      job.className = 'form-hint';
+      job.style.margin = '0';
+      job.textContent = u.profile?.job_title || '';
+
+      text.append(nameLine, job);
+      wrap.append(avatar, text);
+      tdName.append(wrap);
+
+      // Identity ID (permanent, shown for recognition)
+      const tdId = document.createElement('td');
+      tdId.className = 'mono';
+      tdId.textContent = u.identity_id || '—';
+
+      // Email
+      const tdEmail = document.createElement('td');
+      tdEmail.textContent = u.email;
+
+      // Role
       const tdRole = document.createElement('td');
       tdRole.innerHTML = `<span class="status ${u.is_admin ? 'status--admin' : 'status--staff'}">${u.is_admin ? 'Admin' : 'Staff'}</span>`;
-      const tdDev = document.createElement('td'); tdDev.textContent = `${u.device_count ?? 0} active`;
+
+      // Devices
+      const tdDev = document.createElement('td');
+      tdDev.textContent = `${u.device_count ?? 0} active`;
+
+      // Status
       const tdStatus = document.createElement('td');
       tdStatus.innerHTML = `<span class="status ${u.disabled ? 'status--off' : 'status--active'}"><span class="pulse"></span>${u.disabled ? 'Disabled' : 'Active'}</span>`;
-      tr.dataset.href = `person.html?id=${u.id}`; tr.style.cursor = 'pointer';
-      tr.append(tdName, tdEmail, tdRole, tdDev, tdStatus);
+
+      tr.append(tdName, tdId, tdEmail, tdRole, tdDev, tdStatus);
       tbody.append(tr);
     });
+
     refreshIcons();
   }
   $('users-tbody').addEventListener('click', e => {

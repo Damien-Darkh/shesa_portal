@@ -95,6 +95,7 @@ def _serialize_me(user) -> dict:
         "sanity_pending": bool(user.sanity_pending),
         "sanity_last_error": user.sanity_last_error,
         "photo_url": sanity_photo.display_url(user),
+        "identity_id": user.identity_id,
     }
 
 def _push_to_sanity_warning(user) -> list[str]:
@@ -112,64 +113,80 @@ EMPLOYEE_EDITABLE = {"phone", "other_emails", "linkedin_url", "bio", "profile_te
 @require_http_methods(["GET", "PATCH"])
 def me(request):
     user = request.user
-    if request.method == "PATCH":
-        try:
-            data = read_json(request)
-        except ValueError as exc:
-            return error(400, str(exc))
+    if request.method == "GET":
+        return ok(_serialize_me(user))
 
+    try:
+        data = read_json(request)
+    except ValueError as exc:
+        return error(400, str(exc))
+
+    if "language" in data and data["language"] not in LANGUAGES:
+        return error(422, "Unsupported language.")
+
+    forbidden = [k for k in data if k not in EMPLOYEE_EDITABLE | {"language"}]
+    if forbidden:
+        return error(403, f"You cannot change: {', '.join(forbidden)}. Contact HR.")
+
+    changed: list[str] = []
+    try:
         if "language" in data:
-            if data["language"] not in LANGUAGES:
-                return error(422, "Unsupported language.")
             user.language = data["language"]
-            user.save(update_fields=["language"])
-            record(request, "UPDATE", "user", user.id, details={"language": user.language})
+            changed.append("language")
 
-        forbidden = [k for k in data if k not in EMPLOYEE_EDITABLE | {"language"}]
-        if forbidden:
-            return error(403, f"You cannot change: {', '.join(forbidden)}. Contact HR.")
+        if "linkedin_url" in data:
+            user.linkedin_url = _validate_linkedin(data["linkedin_url"])
+            changed.append("linkedin_url")
 
-        from apps.accounts.admin_views import _apply_profile  # reuse validation
-        changed = [k for k in data if k in EMPLOYEE_EDITABLE]
-        if changed and "project_ids" in data:
-            try:
-                available = {p["id"] for p in sanity_projects.list_projects()}
-            except SanityError:
-                return error(503, "Projects are unavailable right now. Try again shortly.")
+        if "other_emails" in data:
+            user.other_emails = [e.strip() for e in (data["other_emails"] or []) if e and e.strip()]
+            changed.append("other_emails")
 
-            # Only check additions, so removing a project still works if Sanity is slow.
-            new_ids = set(data["project_ids"] or []) - set(user.project_ids or [])
-            if new_ids - available:
-                return error(422, "One or more selected projects are not available.")
-            try:
-                if "linkedin_url" in data:
-                    user.linkedin_url = _validate_linkedin(data["linkedin_url"])
-            except ValueError as exc:
-                return error(422, str(exc))
-            if "other_emails" in data:
-                user.other_emails = [e.strip() for e in data["other_emails"] or [] if e and e.strip()]
-            if "profile_text" in data:
-                user.profile_text = (data["profile_text"] or "").strip() or None
-            if "project_ids" in data:
-                user.project_ids = list(data["project_ids"] or [])
-            if "show_on_website" in data:
-                want = bool(data["show_on_website"])
-                if want and not user.show_on_website:
-                    if not data.get("website_consent"):
-                        return error(422, "Please confirm consent before publishing your profile.")
-                    user.website_consent_at = utcnow()
-                user.show_on_website = want
-            user.save()
-            profile_fields = {k: data[k] for k in ("phone", "bio") if k in data}
-            if profile_fields:
-                _apply_profile(user, profile_fields)
-            record(request, "UPDATE", "user", user.id, details={"self_edit": changed})
+        if "profile_text" in data:
+            user.profile_text = (data["profile_text"] or "").strip() or None
+            changed.append("profile_text")
 
-        warnings = _push_to_sanity_warning(user) if changed else []
-        body = _serialize_me(user)
-        body["warnings"] = warnings
-        return ok(body)
-    return ok(_serialize_me(user))
+        if "project_ids" in data:
+            ids = list(data["project_ids"] or [])
+            new_ids = set(ids) - set(user.project_ids or [])
+            if new_ids:
+                # Only additions need checking, so removing a project still works if Sanity is slow.
+                try:
+                    available = {p["id"] for p in sanity_projects.list_projects()}
+                except SanityError:
+                    return error(503, "Projects are unavailable right now. Try again shortly.")
+                if new_ids - available:
+                    return error(422, "One or more selected projects are not available.")
+            user.project_ids = ids
+            changed.append("project_ids")
+
+        if "show_on_website" in data:
+            want = bool(data["show_on_website"])
+            if want and not user.show_on_website:
+                if not data.get("website_consent"):
+                    return error(422, "Please confirm consent before publishing your profile.")
+                user.website_consent_at = utcnow()
+            user.show_on_website = want
+            changed.append("show_on_website")
+    except ValueError as exc:
+        return error(422, str(exc))
+
+    user.save()
+
+    # Phone and bio live on the profile, not on the user.
+    profile_fields = {k: data[k] for k in ("phone", "bio") if k in data}
+    if profile_fields:
+        from apps.accounts.admin_views import _apply_profile  # lazy import avoids a circular import
+        _apply_profile(user, profile_fields)
+        changed += list(profile_fields)
+
+    if changed:
+        record(request, "UPDATE", "user", user.id, details={"self_edit": changed})
+
+    warnings = _push_to_sanity_warning(user) if changed else []
+    body = _serialize_me(user)
+    body["warnings"] = warnings
+    return ok(body)
 
 
 def _validate_linkedin(value: str | None) -> str | None:

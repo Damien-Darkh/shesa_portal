@@ -67,6 +67,12 @@ class User(AbstractBaseUser):
     project_ids = models.JSONField(default=list, blank=True)
 
     website_consent_at = models.DateTimeField(null=True, blank=True)
+    display_order = models.PositiveIntegerField(null=True, blank=True)
+    # Identity Document Numbering System (XXY-XXXXXX). Assigned once, never edited.
+    identity_id = models.CharField(max_length=10, unique=True, null=True, blank=True)
+
+    # Position on the website team grid. Steps of 10 leave room to insert people.
+    display_order = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = "users"

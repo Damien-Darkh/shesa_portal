@@ -56,6 +56,8 @@ def _person(u: User, full: bool) -> dict:
         "full_name": u.full_name,
         "disabled": u.disabled,
         "profile": profile_dict(u),
+        "identity_id": u.identity_id,
+        "display_order": u.display_order,
     }
     if full:
         data.update({
