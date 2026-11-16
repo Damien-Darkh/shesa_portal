@@ -7,6 +7,8 @@ from django.contrib.auth import logout as auth_logout
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from django.http import Http404, HttpResponse
+from apps.common.integrations import unix_launcher
 
 from apps.common.audit import record
 from apps.common.http import api_login_required, error, ok, read_json
@@ -72,6 +74,31 @@ def logout_view(request):
         return HttpResponseRedirect("/logout.html?signedout=1")
     return ok({"logged_out": True})
 
+
+# apps/accounts/views.py (add), or wherever your signed-in user endpoints live
+from django.http import Http404, HttpResponse
+from django.conf import settings
+from apps.common.http import api_login_required
+from apps.common.integrations import unix_launcher
+
+
+@api_login_required
+@require_GET
+def nas_logout_installer(request, platform):
+    if not settings.NAS_IP:
+        raise Http404
+    if platform == "mac":
+        body = unix_launcher.render_macos_installer(settings.NAS_IP)
+        name = "Install NAS Sign-out Cleanup.command"
+    elif platform == "linux":
+        body = unix_launcher.render_linux_installer(settings.NAS_IP)
+        name = "install-nas-signout-cleanup.sh"
+    else:
+        raise Http404
+    response = HttpResponse(body, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
+    response["Cache-Control"] = "no-store"
+    return response
 
 def _serialize_me(user) -> dict:
     return {
@@ -207,10 +234,7 @@ def _validate_linkedin(value: str | None) -> str | None:
 @api_login_required
 @require_POST
 def change_dsm_password(request):
-    """Lets the signed-in user replace the temporary NAS password issued to them."""
     user = request.user
-    if not settings.DSM_URL or not user.dsm_username:
-        return error(400, "NAS account management is disabled for your user.")
     try:
         data = read_json(request)
     except ValueError as exc:
@@ -221,26 +245,33 @@ def change_dsm_password(request):
         return error(400, "Password is required.")
     if new_password != (data.get("confirm_password") or "").strip():
         return error(400, "Passwords do not match.")
+    if not user.dsm_must_change_password and not data.get("voluntary", False):
+        pass  # voluntary change is allowed too
 
     description = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    changed = []
     try:
-        synology_manager.update_password(user.dsm_username, new_password, description=description)
         if settings.AUTHENTIK_API_URL and user.authentik_username:
             authentik_manager.set_password(user.authentik_username, new_password)
+            changed.append("authentik")
+        if settings.DSM_URL and user.dsm_username:
+            synology_manager.update_password(user.dsm_username, new_password, description=description)
+            changed.append("nas")
     except synology_manager.PasswordPolicyError as exc:
         return error(422, str(exc))
-    except synology_manager.DsmApiError as exc:
-        return error(502, f"Could not update NAS password: {exc}")
-    except authentik_manager.AuthentikApiError as exc:
-        return error(502, f"NAS password changed, but Authentik was not updated: {exc}")
+    except (synology_manager.DsmApiError, authentik_manager.AuthentikApiError) as exc:
+        return error(502, f"Could not update the password: {exc}")
 
+    if not changed:
+        return error(400, "No sign-in or NAS account is linked to your user.")
+
+    user.dsm_must_change_password = False
     user.dsm_temp_password = None
     user.dsm_password_token = None
     user.dsm_password_expires_at = None
-    user.dsm_must_change_password = False
     user.save()
-    record(request, "UPDATE", "nas_password", user.id)
-    return ok({"updated": True})
+    record(request, "UPDATE", "shared_password", user.id, details={"updated": changed})
+    return ok({"updated": True, "updated_accounts": changed})
 
 @api_login_required
 @require_GET

@@ -48,6 +48,9 @@ class User(AbstractBaseUser):
     dsm_password_expires_at = models.DateTimeField(null=True, blank=True)
     dsm_must_change_password = models.BooleanField(default=False)
 
+    # Set when the welcome email is actually delivered. Never set optimistically.
+    welcome_email_sent_at = models.DateTimeField(null=True, blank=True)
+
     roles = models.ManyToManyField("Role", related_name="users", db_table="user_roles", blank=True)
 
     vpn_access = models.BooleanField(default=False)
@@ -67,12 +70,12 @@ class User(AbstractBaseUser):
     project_ids = models.JSONField(default=list, blank=True)
 
     website_consent_at = models.DateTimeField(null=True, blank=True)
-    display_order = models.PositiveIntegerField(null=True, blank=True)
-    # Identity Document Numbering System (XXY-XXXXXX). Assigned once, never edited.
-    identity_id = models.CharField(max_length=10, unique=True, null=True, blank=True)
 
     # Position on the website team grid. Steps of 10 leave room to insert people.
     display_order = models.PositiveIntegerField(null=True, blank=True)
+
+    # Identity Document Numbering System (XXY-XXXXXX). Assigned once, never edited.
+    identity_id = models.CharField(max_length=10, unique=True, null=True, blank=True)
 
     class Meta:
         db_table = "users"

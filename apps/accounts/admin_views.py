@@ -48,6 +48,8 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
         "can_use_vpn": can_use_vpn(user),
         "nas_account": user.dsm_username,
         "authentik_account": user.authentik_username,
+        "must_change_password": bool(user.dsm_must_change_password),
+        "welcome_email_sent_at": user.welcome_email_sent_at.isoformat() if user.welcome_email_sent_at else None,
         "identity_id": user.identity_id,
         "display_order": user.display_order,
         "created_at": user.created_at.isoformat(),
@@ -56,6 +58,9 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
         "show_on_website": bool(user.show_on_website),
         "sanity_pending": bool(user.sanity_pending),
         "sanity_last_error": user.sanity_last_error,
+        "authentik_pending": bool(user.authentik_username is None and settings.AUTHENTIK_API_URL),
+        "nas_pending": bool(user.dsm_username is None and settings.DSM_URL),
+        "email_pending": bool(user.welcome_email_sent_at is None and (user.authentik_username or user.dsm_username)),
     }
     if detail:
         data["roles"] = [r.name for r in user.roles.all()]
@@ -219,14 +224,14 @@ def _set_shared_password(user, password: str) -> None:
             synology_manager.reset_password(user.dsm_username, password)
         except (synology_manager.DsmApiError, synology_manager.PasswordPolicyError) as exc:
             raise AccountError(f"Could not set the NAS password: {exc}") from exc
-        user.dsm_must_change_password = True
-        user.dsm_temp_password = None
-        user.dsm_password_token = None
-        user.dsm_password_expires_at = None
-        user.save()
         done = True
     if not done:
         raise AccountError("This user has no sign-in or NAS account to reset.")
+    user.dsm_must_change_password = True
+    user.dsm_temp_password = None
+    user.dsm_password_token = None
+    user.dsm_password_expires_at = None
+    user.save()
 
 
 def _push_to_sanity(user) -> str | None:
@@ -260,13 +265,17 @@ def users(request):
     first_name = (data.get("first_name") or "").strip() or None
     last_name = (data.get("last_name") or "").strip() or None
     make_admin = bool(data.get("is_admin"))
+
     if not email or "@" not in email:
-        return error(400, "Enter a valid email address.")
+        return error(400, "Enter a valid email address.", field="email")
     if User.objects.filter(email=email).exists():
-        return error(409, f"{email} already has an account.")
+        return error(409, f"{email} already has an account.", field="email")
 
     user = User.objects.create(
-        email=email, is_admin=make_admin, first_name=first_name, last_name=last_name,
+        email=email,
+        is_admin=make_admin,
+        first_name=first_name,
+        last_name=last_name,
         vpn_access=bool(data.get("vpn_access")) and not make_admin,
         display_order=_next_display_order(),
     )
@@ -280,7 +289,7 @@ def users(request):
     if identity_warning:
         warnings.append(identity_warning)
 
-    # One password for both systems. Generated once, never stored.
+    # One password for every account this user gets. Generated once, returned once, never stored.
     password = passwords.generate(avoid=email)
 
     nas_ok, warning = _provision_nas(user, first_name, last_name, make_admin, password)
@@ -290,33 +299,47 @@ def users(request):
     if warning:
         warnings.append(warning)
 
-    issued = nas_ok or auth_ok
-    if issued:
+    welcome_sent = False
+    if nas_ok or auth_ok:
+        # Enforced by the portal itself, so it applies whether or not NAS is configured.
+        user.dsm_must_change_password = True
+        user.save(update_fields=["dsm_must_change_password"])
         try:
             mailer.send_welcome_email(
-                recipient_email=email, password=password,
-                first_name=first_name, last_name=last_name,
+                recipient_email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
             )
+            welcome_sent = True
+            user.welcome_email_sent_at = utcnow()
+            user.save(update_fields=["welcome_email_sent_at"])
         except mailer.MailError as exc:
             warnings.append(f"Welcome email not sent: {exc}")
     else:
         password = None
-        warnings.append("No sign-in or NAS account was created, so no password was issued "
-                        "and no welcome email was sent.")
+        warnings.append(
+            "No sign-in or NAS account was created, so no password was issued "
+            "and no welcome email was sent."
+        )
 
     sanity_warning = _push_to_sanity(user)
     if sanity_warning:
         warnings.append(sanity_warning)
 
     record(request, "CREATE", "user", user.id, details={
-        "email": email, "identity_id": user.identity_id,
-        "nas": nas_ok, "authentik": auth_ok, "sanity": bool(user.sanity_id),
+        "email": email,
+        "identity_id": user.identity_id,
+        "nas": nas_ok,
+        "authentik": auth_ok,
+        "welcome_email": welcome_sent,
+        "sanity": bool(user.sanity_id),
     })
 
     return ok({
         "user": _serialize_user(user, detail=True),
-        "nas_temporary_password": password if nas_ok else None,
-        "authentik_temporary_password": password if auth_ok else None,
+        "temporary_password": password,
+        "welcome_email_sent": welcome_sent,
         "warnings": warnings,
     }, status=201)
 
@@ -345,9 +368,9 @@ def user_detail(request, user_id):
     if "email" in data:
         new_email = (data["email"] or "").strip().lower()
         if not new_email or "@" not in new_email:
-            return error(400, "Enter a valid email address.")
+            return error(400, "Enter a valid email address.", field="email")
         if new_email != user.email and User.objects.filter(email=new_email).exclude(pk=user.pk).exists():
-            return error(409, f"{new_email} is already in use by another account.")
+            return error(409, f"{new_email} is already in use by another account.", field="email")
         user.email = new_email
         changed.append("email")
 
@@ -528,7 +551,7 @@ def toggle_admin(request, user_id):
 @api_admin_required
 @require_POST
 def reset_nas_password(request, user_id):
-    """Sets a new shared password on the NAS and Authentik account. Returns it once."""
+    """Sets a new shared password on every linked account. Returns it once."""
     user = get_object_or_404(User, pk=user_id)
     password = passwords.generate(avoid=user.email)
     try:
@@ -537,9 +560,9 @@ def reset_nas_password(request, user_id):
         return error(502, str(exc))
     record(request, "UPDATE", "shared_password", user.id, details={"reset_by_admin": True})
     return ok({
-        "nas_temporary_password": password,
-        "authentik_temporary_password": password if user.authentik_username else None,
-        "must_change_password": False,
+        "temporary_password": password,
+        "nas_account": user.dsm_username,
+        "authentik_account": user.authentik_username,
     })
 
 
@@ -555,8 +578,9 @@ def reset_authentik_password(request, user_id):
         return error(502, str(exc))
     record(request, "UPDATE", "shared_password", user.id, details={"reset_by_admin": True})
     return ok({
-        "authentik_temporary_password": password,
-        "nas_temporary_password": password if user.dsm_username else None,
+        "temporary_password": password,
+        "nas_account": user.dsm_username,
+        "authentik_account": user.authentik_username,
     })
 
 

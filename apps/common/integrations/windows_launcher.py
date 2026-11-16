@@ -8,11 +8,13 @@ windows_launcher.py - Generates the two pieces of the Windows onboarding flow.
      by app.py's /devices/<id>/launcher-script route then wiped.
 
 Flow in the PS1:
-  - Shortcut to \\NAS_IP always created/verified first, unconditionally.
-  - Detect WireGuard state and NAS direct-reachability.
-  - Present a Windows Forms dialog for user choice.
-  - Act on the choice (install/enable/disable/remove/skip).
-  - Verify handshake + NAS reachability only when tunnel ends up active.
+  - Shortcut to \\NAS_IP is always created or verified first.
+  - A per-user scheduled task is installed that removes NAS sessions and
+    saved credentials on sign-out, shutdown or restart.
+  - WireGuard state and NAS direct-reachability are detected.
+  - A Windows Forms dialog lets the user choose what to do.
+  - The choice is applied (install, enable, disable, remove or skip).
+  - Handshake and NAS reachability are verified only when the tunnel is active.
 """
 
 CMD_TEMPLATE = """@echo off
@@ -39,7 +41,7 @@ PS1_TEMPLATE = r"""
 # ============================================================
 
 $ErrorActionPreference = "Stop"
-$DeviceId  = "__DEVICE_ID__"
+$DeviceId   = "__DEVICE_ID__"
 $TunnelName = "__TUNNEL_NAME__"
 $NasIp      = "__NAS_IP__"
 $ShareName  = "__SHARE_NAME__"
@@ -115,8 +117,7 @@ try {
             $wsh = New-Object -ComObject WScript.Shell
             $sc  = $wsh.CreateShortcut($shortcutPath)
             # WScript.Shell TargetPath does not reliably handle UNC paths on all
-            # Windows builds. Using explorer.exe + Arguments is the safe pattern:
-            # the shortcut opens Explorer at the UNC location without COM path issues.
+            # Windows builds. explorer.exe with Arguments is the safe pattern.
             $sc.TargetPath  = "explorer.exe"
             $sc.Arguments   = $uncTarget
             $sc.Description = "Company file server"
@@ -128,6 +129,82 @@ try {
         }
     } else {
         Write-Log "Desktop shortcut already exists - skipping"
+    }
+
+    # ============================================================
+    # STEP 1b - NAS SIGN-OUT CLEANUP (always, independent of VPN)
+    # A per-user scheduled task runs a cleanup script when the user
+    # signs out, shuts down or restarts. The script removes NAS
+    # sessions and saved credentials for that user.
+    # ============================================================
+
+    function Install-NasLogoutTask {
+        $cleanupDir    = Join-Path $env:ProgramData "CompanyNetwork"
+        $cleanupScript = Join-Path $cleanupDir "nas-logout.ps1"
+        $taskName      = "CompanyNetwork-NasLogout"
+
+        if (-not (Test-Path $cleanupDir)) {
+            New-Item -ItemType Directory -Path $cleanupDir -Force | Out-Null
+        }
+
+        # NasIp is substituted by the server when the script is rendered.
+        $cleanupContent = @'
+# nas-logout.ps1 - removes NAS sessions and saved credentials for the current user.
+param([string]$NasIp = "__NAS_IP__")
+
+$ErrorActionPreference = "SilentlyContinue"
+
+Get-SmbMapping -ErrorAction SilentlyContinue |
+    Where-Object { $_.RemotePath -like "\\$NasIp\*" } |
+    ForEach-Object {
+        Remove-SmbMapping -RemotePath $_.RemotePath -Force -ErrorAction SilentlyContinue
+    }
+
+net use "\\$NasIp" /delete /y 2>$null | Out-Null
+cmdkey /delete:$NasIp 2>$null | Out-Null
+'@
+        Set-Content -Path $cleanupScript -Value $cleanupContent -Encoding ASCII
+        Write-Log "NAS cleanup script written to $cleanupScript"
+
+        # Event triggers:
+        #   Security 4647 = user-initiated logoff (needs "Audit Logoff" policy, on by default in most builds)
+        #   System   1074 = shutdown or restart initiated by a process (User32)
+        $eventSubscription = @"
+<QueryList>
+  <Query Id="0" Path="Security">
+    <Select Path="Security">*[System[(EventID=4647)]]</Select>
+  </Query>
+  <Query Id="1" Path="System">
+    <Select Path="System">*[System[Provider[@Name='User32'] and (EventID=1074)]]</Select>
+  </Query>
+</QueryList>
+"@
+
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $action      = New-ScheduledTaskAction -Execute "powershell.exe" `
+                        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$cleanupScript`""
+        $principal   = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
+        $settings    = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+                        -StartWhenAvailable -Hidden -ExecutionTimeLimit (New-TimeSpan -Minutes 2)
+
+        $cimClass = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace Root/Microsoft/Windows/TaskScheduler
+        $trigger  = New-CimInstance -CimClass $cimClass -ClientOnly
+        $trigger.Subscription = $eventSubscription
+        $trigger.Enabled      = $true
+
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+            -Principal $principal -Settings $settings `
+            -Description "Removes NAS sessions and saved credentials on sign-out, shutdown or restart." |
+            Out-Null
+        Write-Log "NAS logout task registered: $taskName for $currentUser"
+    }
+
+    try {
+        Install-NasLogoutTask
+    } catch {
+        # Non-fatal: the VPN and shortcut still work without the cleanup task.
+        Write-Log "Could not install NAS logout task (non-fatal): $_" "WARN"
     }
 
     # ============================================================
@@ -154,7 +231,7 @@ try {
     }
 
     function Test-NasDirect {
-        # Probe NAS SMB port without the VPN - if it answers we're on the LAN.
+        # Probe the NAS SMB port without the VPN. An answer means the machine is on the LAN.
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
             $ar  = $tcp.BeginConnect($NasIp, 445, $null, $null)
@@ -164,19 +241,18 @@ try {
         } catch { return $false }
     }
 
-    $wgExe     = Get-WireGuardExe
-    $wgInstalled = $null -ne $wgExe
-    $tunnelSvc = Get-TunnelService
+    $wgExe        = Get-WireGuardExe
+    $wgInstalled  = $null -ne $wgExe
+    $tunnelSvc    = Get-TunnelService
     $tunnelExists = $null -ne $tunnelSvc
 
     $state = if ($tunnelSvc) { $tunnelSvc.Status } else { "None" }
     Write-Log "WireGuard installed: $wgInstalled | Tunnel exists: $tunnelExists | State: $state"
 
     # ============================================================
-    # STEP 3 - DIALOG AND ACTION
+    # STEP 3 - HELPERS
     # ============================================================
 
-    # --- Helper: install WireGuard if not present ---
     function Install-WireGuard {
         if (Get-WireGuardExe) { Write-Log "WireGuard already installed"; return }
 
@@ -206,9 +282,8 @@ try {
         Write-Log "WireGuard installed successfully"
     }
 
-    # --- Helper: write config, install tunnel service ---
     function Import-Tunnel {
-        # Remove stale service from a previous attempt if present
+        # Remove a stale service from a previous attempt, if present.
         $existing = Get-TunnelService
         if ($existing) {
             Write-Log "Removing stale tunnel service before reimporting..." "WARN"
@@ -242,7 +317,6 @@ PersistentKeepalive = $PeerKeepalive
         Write-Log "Tunnel service imported"
     }
 
-    # --- Helper: start tunnel and poll until running ---
     function Enable-Tunnel {
         $svc = Get-TunnelService
         if ($svc -and $svc.Status -eq 'Running') { Write-Log "Tunnel already running"; return }
@@ -256,7 +330,6 @@ PersistentKeepalive = $PeerKeepalive
         Fail "Tunnel did not reach a running state. Check the log at $LogFile."
     }
 
-    # --- Helper: stop tunnel service cleanly ---
     function Disable-Tunnel {
         $svcName = "WireGuardTunnel`$TunnelName"
         Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue
@@ -268,7 +341,6 @@ PersistentKeepalive = $PeerKeepalive
         Write-Log "Tunnel did not stop cleanly within timeout" "WARN"
     }
 
-    # --- Helper: uninstall tunnel service ---
     function Remove-Tunnel {
         $wg = Get-WireGuardExe
         if (-not $wg) { Write-Log "WireGuard not found, nothing to uninstall"; return }
@@ -277,7 +349,6 @@ PersistentKeepalive = $PeerKeepalive
         Write-Log "Tunnel service removed"
     }
 
-    # --- Helper: uninstall WireGuard itself ---
     function Uninstall-WireGuard {
         $wg = Get-WireGuardExe
         if (-not $wg) { Write-Log "WireGuard not installed, nothing to remove"; return }
@@ -286,7 +357,7 @@ PersistentKeepalive = $PeerKeepalive
             $p = Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait -PassThru
             Write-Log "WireGuard uninstall exit code: $($p.ExitCode)"
         } else {
-            # Fallback: WireGuard registers with Windows uninstall via its own installer
+            # Fallback: find the uninstall entry WireGuard registered with Windows.
             $key = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" `
                 -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match 'WireGuard' }
             if ($key -and $key.UninstallString) {
@@ -299,7 +370,6 @@ PersistentKeepalive = $PeerKeepalive
         }
     }
 
-    # --- Helper: verify handshake + NAS reachability (only when tunnel is active) ---
     function Test-VpnAndNas {
         $wgCli = Get-WgCliExe
         $handshakeOk = $false
@@ -345,7 +415,7 @@ PersistentKeepalive = $PeerKeepalive
     }
 
     # ============================================================
-    # BRANCH: Tunnel service already exists
+    # BRANCH: tunnel service already exists
     # ============================================================
 
     if ($tunnelExists) {
@@ -354,8 +424,8 @@ PersistentKeepalive = $PeerKeepalive
 
         if ($isRunning) {
             $choice = [System.Windows.Forms.MessageBox]::Show(
-                "The company VPN tunnel is already installed and active.`n`n  Yes    — Keep it enabled (run connectivity check)`n  No     — Disable the tunnel (leaves WireGuard installed)`n  Cancel — Remove the tunnel entirely",
-                "Company Network Setup — Tunnel active",
+                "The company VPN tunnel is already installed and active.`n`n  Yes    - Keep it enabled (run connectivity check)`n  No     - Disable the tunnel (leaves WireGuard installed)`n  Cancel - Remove the tunnel entirely",
+                "Company Network Setup - Tunnel active",
                 [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
                 [System.Windows.Forms.MessageBoxIcon]::Question
             )
@@ -376,7 +446,7 @@ PersistentKeepalive = $PeerKeepalive
                     Remove-Tunnel
                     $also = [System.Windows.Forms.MessageBox]::Show(
                         "Tunnel removed.`n`nDo you also want to uninstall WireGuard completely?`n`nChoose No to keep WireGuard for other connections.",
-                        "Company Network Setup — Also remove WireGuard?",
+                        "Company Network Setup - Also remove WireGuard?",
                         [System.Windows.Forms.MessageBoxButtons]::YesNo,
                         [System.Windows.Forms.MessageBoxIcon]::Question
                     )
@@ -391,8 +461,8 @@ PersistentKeepalive = $PeerKeepalive
         } else {
             # Tunnel exists but is stopped
             $choice = [System.Windows.Forms.MessageBox]::Show(
-                "The company VPN tunnel is installed but not active.`n`n  Yes    — Enable the tunnel now`n  No     — Keep it disabled`n  Cancel — Remove the tunnel entirely",
-                "Company Network Setup — Tunnel disabled",
+                "The company VPN tunnel is installed but not active.`n`n  Yes    - Enable the tunnel now`n  No     - Keep it disabled`n  Cancel - Remove the tunnel entirely",
+                "Company Network Setup - Tunnel disabled",
                 [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
                 [System.Windows.Forms.MessageBoxIcon]::Question
             )
@@ -411,9 +481,8 @@ PersistentKeepalive = $PeerKeepalive
                     Write-Log "User chose: remove tunnel"
                     Remove-Tunnel
                     $also = [System.Windows.Forms.MessageBox]::Show(
-                        "Tunnel removed.`n`nDo you also want to uninstall WireGuard completely?`n`n" +
-                        "Choose No to keep WireGuard for other connections.",
-                        "Company Network Setup — Also remove WireGuard?",
+                        "Tunnel removed.`n`nDo you also want to uninstall WireGuard completely?`n`nChoose No to keep WireGuard for other connections.",
+                        "Company Network Setup - Also remove WireGuard?",
                         [System.Windows.Forms.MessageBoxButtons]::YesNo,
                         [System.Windows.Forms.MessageBoxIcon]::Question
                     )
@@ -431,7 +500,7 @@ PersistentKeepalive = $PeerKeepalive
     }
 
     # ============================================================
-    # BRANCH: Tunnel does not exist - detect LAN vs remote
+    # BRANCH: no tunnel - detect LAN or remote
     # ============================================================
 
     Write-Log "No existing tunnel. Probing NAS directly..."
@@ -441,22 +510,22 @@ PersistentKeepalive = $PeerKeepalive
     if ($onLan) {
         $choice = [System.Windows.Forms.MessageBox]::Show(
             "You're connected to the company network directly.`n`n" +
-            "  Yes    — Install WireGuard and activate the tunnel`n" +
+            "  Yes    - Install WireGuard and activate the tunnel`n" +
             "             (needed when working remotely)`n" +
-            "  No     — Install WireGuard but leave the tunnel disabled`n" +
+            "  No     - Install WireGuard but leave the tunnel disabled`n" +
             "             (ready for remote use, not active now)`n" +
-            "  Cancel — Skip — just use the desktop shortcut",
-            "Company Network Setup — Office network detected",
+            "  Cancel - Skip - just use the desktop shortcut",
+            "Company Network Setup - Office network detected",
             [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
             [System.Windows.Forms.MessageBoxIcon]::Question
         )
     } else {
         $choice = [System.Windows.Forms.MessageBox]::Show(
-            "Remote network detected — the company server is not directly reachable.`n`n" +
-            "  Yes    — Install WireGuard and activate the tunnel now`n" +
-            "  No     — Install WireGuard but leave the tunnel disabled`n" +
+            "Remote network detected - the company server is not directly reachable.`n`n" +
+            "  Yes    - Install WireGuard and activate the tunnel now`n" +
+            "  No     - Install WireGuard but leave the tunnel disabled`n" +
             "             (you can enable it later from the WireGuard app)",
-            "Company Network Setup — Remote network detected",
+            "Company Network Setup - Remote network detected",
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Question
         )
@@ -475,10 +544,9 @@ PersistentKeepalive = $PeerKeepalive
             Write-Log "User chose: install + disabled"
             Install-WireGuard
             Import-Tunnel
-            # Install-tunnelservice starts the service automatically - stop it immediately
+            # Installing the tunnel service starts it automatically. Stop it straight away.
             Start-Sleep -Seconds 2
             Disable-Tunnel
-            # Verify the service actually stopped cleanly
             $svc = Get-TunnelService
             if ($svc -and $svc.Status -ne 'Stopped') {
                 Write-Log "Service did not reach Stopped state, current: $($svc.Status)" "WARN"
@@ -490,10 +558,9 @@ PersistentKeepalive = $PeerKeepalive
         'Cancel' {
             # Only reachable on the LAN branch (YesNoCancel dialog)
             Write-Log "User chose: skip"
-            Show-Info "No VPN setup needed right now.`n`nYour desktop shortcut to the company server is ready — it will work while you're on the office network."
+            Show-Info "No VPN setup needed right now.`n`nYour desktop shortcut to the company server is ready. It will work while you're on the office network."
         }
         default {
-            # User dismissed the dialog without choosing
             Write-Log "User dismissed the dialog - no action taken" "WARN"
         }
     }
@@ -505,29 +572,34 @@ PersistentKeepalive = $PeerKeepalive
 """
 
 
+def _ps_quote_fill(template: str, values: dict[str, str]) -> str:
+    """Replaces __PLACEHOLDER__ tokens. Values are inserted verbatim."""
+    for key, value in values.items():
+        template = template.replace(key, value)
+    return template
+
+
 def render_cmd(device_id: int, token: str, portal_url: str) -> str:
-    return (
-        CMD_TEMPLATE
-        .replace("__DEVICE_ID__", str(device_id))
-        .replace("__ONE_TIME_TOKEN__", token)
-        .replace("__PORTAL_URL__", portal_url.rstrip("/"))
-    )
+    return _ps_quote_fill(CMD_TEMPLATE, {
+        "__DEVICE_ID__": str(device_id),
+        "__ONE_TIME_TOKEN__": token,
+        "__PORTAL_URL__": portal_url.rstrip("/"),
+    })
 
 
 def render_ps1(device_id: int, tunnel_name: str, nas_ip: str, share_name: str, wg: dict) -> str:
     """wg is the dict returned by wg_manager.create_peer()."""
-    return (
-        PS1_TEMPLATE
-        .replace("__DEVICE_ID__", str(device_id))
-        .replace("__TUNNEL_NAME__", tunnel_name)
-        .replace("__NAS_IP__", nas_ip)
-        .replace("__SHARE_NAME__", share_name)
-        .replace("__WG_PRIVATE_KEY__", wg["private_key"])
-        .replace("__WG_ADDRESS__", wg["address_cidr"])
-        .replace("__WG_DNS__", wg["dns"])
-        .replace("__WG_PEER_PUBLIC_KEY__", wg["peer_public_key"])
-        .replace("__WG_PRESHARED_KEY__", wg["preshared_key"])
-        .replace("__WG_ENDPOINT__", wg["endpoint"])
-        .replace("__WG_ALLOWED_IPS__", wg["allowed_ips"])
-        .replace("__WG_KEEPALIVE__", wg["keepalive"])
-    )
+    return _ps_quote_fill(PS1_TEMPLATE, {
+        "__DEVICE_ID__": str(device_id),
+        "__TUNNEL_NAME__": tunnel_name,
+        "__NAS_IP__": nas_ip,
+        "__SHARE_NAME__": share_name,
+        "__WG_PRIVATE_KEY__": wg["private_key"],
+        "__WG_ADDRESS__": wg["address_cidr"],
+        "__WG_DNS__": wg["dns"],
+        "__WG_PEER_PUBLIC_KEY__": wg["peer_public_key"],
+        "__WG_PRESHARED_KEY__": wg["preshared_key"],
+        "__WG_ENDPOINT__": wg["endpoint"],
+        "__WG_ALLOWED_IPS__": wg["allowed_ips"],
+        "__WG_KEEPALIVE__": wg["keepalive"],
+    })
