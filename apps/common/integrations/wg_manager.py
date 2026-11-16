@@ -11,26 +11,39 @@ import base64
 import ipaddress
 import os
 import re
+import uuid
 
 import requests
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
-OPNSENSE_URL = os.environ["OPNSENSE_URL"].rstrip("/")
-API_KEY = os.environ["OPNSENSE_API_KEY"]
-API_SECRET = os.environ["OPNSENSE_API_SECRET"]
-INSTANCE_UUID = os.environ["WG_INSTANCE_UUID"]
-WG_ENDPOINT = os.environ["WG_ENDPOINT"]
+
+BACKEND = os.environ.get("WIREGUARD_BACKEND", "opnsense").lower()
+
+if BACKEND not in ("mock", "opnsense"):
+    raise ValueError(f"Invalid WIREGUARD_BACKEND: {BACKEND}")
+
+OPNSENSE_URL = os.environ.get("OPNSENSE_URL", "").rstrip("/")
+API_KEY = os.environ.get("OPNSENSE_API_KEY", "")
+API_SECRET = os.environ.get("OPNSENSE_API_SECRET", "")
+INSTANCE_UUID = os.environ.get("WG_INSTANCE_UUID", "")
+
+WG_ENDPOINT = os.environ.get("WG_ENDPOINT", "development.invalid")
 WG_PORT = os.environ.get("WG_PORT", "51820")
 WG_SUBNET = os.environ.get("WG_SUBNET", "10.10.10.0/24")
 WG_DNS = os.environ.get("WG_DNS", "192.168.11.254")
-ALLOWED_IPS_CLIENT = os.environ.get("ALLOWED_IPS_CLIENT", "192.168.11.0/24,10.10.10.0/24")
+ALLOWED_IPS_CLIENT = os.environ.get(
+    "ALLOWED_IPS_CLIENT",
+    "192.168.11.0/24,10.10.10.0/24"
+)
 VERIFY_SSL = os.environ.get("VERIFY_SSL", "false").lower() == "true"
 
 _session = requests.Session()
 _session.auth = (API_KEY, API_SECRET)
 _session.verify = VERIFY_SSL
+
 if not VERIFY_SSL:
     requests.packages.urllib3.disable_warnings()
+
 
 
 class WgApiError(Exception):
@@ -67,6 +80,20 @@ def gen_psk():
 
 
 def list_clients():
+    if BACKEND == "mock":
+        from apps.devices.models import Device
+
+        return [
+            {
+                "name": row["wg_api_name"],
+                "uuid": str(row["id"]),
+                "tunneladdress": f'{row["wg_address"]}/32',
+            }
+            for row in Device.objects.exclude(
+                wg_address__isnull=True
+            ).exclude(wg_address="")
+            .values("id", "wg_api_name", "wg_address")
+        ]
     data = _post("wireguard/client/search_client", {"current": 1, "rowCount": -1})
     return data.get("rows", [])
 
@@ -87,46 +114,63 @@ def next_free_ip():
     raise WgApiError("No free IPs left in WireGuard subnet")
 
 
+
 def create_peer(display_name):
-    """Creates a new WireGuard peer on OPNsense. Returns a dict with the
-    client .conf text and the OPNsense uuid - the private key is returned
-    ONLY here and is never stored by this module; the caller must show it
-    to the user once and discard it."""
+    """Create a real or simulated WireGuard peer."""
+
     api_name = sanitize_peer_name(display_name)
     ip = next_free_ip()
+
     priv, pub = gen_keypair()
     psk = gen_psk()
 
-    payload = {
-        "configbuilder": {
-            "server": INSTANCE_UUID,
-            "servers": INSTANCE_UUID,
-            "endpoint": f"{WG_ENDPOINT}:{WG_PORT}",
-            "name": api_name,
-            "pubkey": pub,
-            "privkey": priv,
-            "address": f"{ip}/32",
-            "psk": psk,
-            "tunneladdress": ALLOWED_IPS_CLIENT,
-            "keepalive": "25",
-            "peer_dns": WG_DNS,
+    if BACKEND == "mock":
+        peer_uuid = str(uuid.uuid4())
+        server_pub = get_server_pubkey()
+
+    else:
+        payload = {
+            "configbuilder": {
+                "server": INSTANCE_UUID,
+                "servers": INSTANCE_UUID,
+                "endpoint": f"{WG_ENDPOINT}:{WG_PORT}",
+                "name": api_name,
+                "pubkey": pub,
+                "privkey": priv,
+                "address": f"{ip}/32",
+                "psk": psk,
+                "tunneladdress": ALLOWED_IPS_CLIENT,
+                "keepalive": "25",
+                "peer_dns": WG_DNS,
+            }
         }
-    }
-    result = _post("wireguard/client/add_client_builder", payload)
-    if result.get("result") != "saved":
-        raise WgApiError(f"OPNsense rejected peer creation: {result}")
 
-    _post("wireguard/service/reconfigure")
+        result = _post(
+            "wireguard/client/add_client_builder",
+            payload
+        )
 
-    created = None
-    for row in list_clients():
-        if row.get("name") == api_name:
-            created = row
-            break
-    if created is None:
-        raise WgApiError("Peer reported saved but not found afterward")
+        if result.get("result") != "saved":
+            raise WgApiError(
+                f"OPNsense rejected peer creation: {result}"
+            )
 
-    server_pub = get_server_pubkey()
+        _post("wireguard/service/reconfigure")
+
+        created = next(
+            (row for row in list_clients()
+             if row.get("name") == api_name),
+            None
+        )
+
+        if created is None:
+            raise WgApiError(
+                "Peer reported saved but not found afterward"
+            )
+
+        peer_uuid = created["uuid"]
+        server_pub = get_server_pubkey()
+
     conf = (
         f"[Interface]\n"
         f"PrivateKey = {priv}\n"
@@ -139,14 +183,12 @@ def create_peer(display_name):
         f"AllowedIPs = {ALLOWED_IPS_CLIENT}\n"
         f"PersistentKeepalive = 25\n"
     )
+
     return {
-        "uuid": created["uuid"],
+        "uuid": peer_uuid,
         "api_name": api_name,
         "address": ip,
         "conf": conf,
-        # Discrete fields, same values baked into `conf` above - kept
-        # separate too so callers (e.g. the Windows launcher generator)
-        # don't need to re-parse the .conf text to get them back out.
         "private_key": priv,
         "address_cidr": f"{ip}/32",
         "dns": WG_DNS,
@@ -158,31 +200,58 @@ def create_peer(display_name):
     }
 
 
+_mock_server_pubkey = None
+
+
 def get_server_pubkey():
-    server = _get(f"wireguard/server/get_server/{INSTANCE_UUID}")
+    global _mock_server_pubkey
+
+    if BACKEND == "mock":
+        if _mock_server_pubkey is None:
+            _, _mock_server_pubkey = gen_keypair()
+
+        return _mock_server_pubkey
+
+    server = _get(
+        f"wireguard/server/get_server/{INSTANCE_UUID}"
+    )
     body = server.get("server", server)
+
     return body.get("pubkey", "")
 
 
+
+
 def revoke_peer(uuid):
+    if BACKEND == "mock":
+        return
+
     _post(f"wireguard/client/toggle_client/{uuid}", {"enabled": "0"})
     _post("wireguard/service/reconfigure")
 
 
 def enable_peer(uuid):
+    if BACKEND == "mock":
+        return
+
     _post(f"wireguard/client/toggle_client/{uuid}", {"enabled": "1"})
     _post("wireguard/service/reconfigure")
 
 
 def delete_peer(uuid):
+    if BACKEND == "mock":
+        return
+
     _post(f"wireguard/client/del_client/{uuid}")
     _post("wireguard/service/reconfigure")
 
 
+
 def get_peer_status():
-    """Live handshake/traffic info, keyed by public key, from the service."""
+    if BACKEND == "mock":
+        return {}
+
     try:
-        data = _get("wireguard/service/show")
-        return data
+        return _get("wireguard/service/show")
     except Exception:
         return {}

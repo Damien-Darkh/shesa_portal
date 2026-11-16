@@ -25,6 +25,8 @@ class Device(models.Model):
     launcher_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
     launcher_script = models.TextField(null=True, blank=True)
     launcher_token_expires_at = models.DateTimeField(null=True, blank=True)
+    # WireGuard peer data for the macOS/Linux installers. Kept only while the launcher token is valid.
+    launcher_wg_data = models.JSONField(null=True, blank=True)
 
     class Meta:
         db_table = "devices"
@@ -45,6 +47,13 @@ class Device(models.Model):
             and self.launcher_token_expires_at
             and self.launcher_token_expires_at > utcnow()
         )
+
+    @property
+    def unix_launcher_data(self):
+        """WireGuard data for the macOS/Linux installers, or None once the launcher window has closed."""
+        if not self.launcher_available or not self.launcher_wg_data:
+            return None
+        return self.launcher_wg_data
 
     def __str__(self):
         return self.device_name

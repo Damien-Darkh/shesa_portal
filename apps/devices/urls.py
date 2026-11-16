@@ -10,4 +10,6 @@ urlpatterns = [
     path("<int:device_id>/delete", views.device_delete, name="device_delete"),
     path("<int:device_id>/launcher.cmd", views.device_launcher_cmd, name="device_launcher_cmd"),
     path("<int:device_id>/launcher-script", views.device_launcher_script, name="device_launcher_script"),
+    path("<int:device_id>/launcher.command", views.device_launcher_unix, {"platform": "mac"}, name="device_launcher_mac"),
+    path("<int:device_id>/launcher.sh", views.device_launcher_unix, {"platform": "linux"}, name="device_launcher_linux"),
 ]

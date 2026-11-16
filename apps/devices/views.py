@@ -12,10 +12,18 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.common.audit import record
 from apps.common.http import api_admin_required, api_login_required, error, ok, read_json
 from apps.common.integrations import windows_launcher, wg_manager
+from apps.common.integrations import unix_launcher
 from apps.common.utils import utcnow
 
 from .models import Device
 from .services import provision_device
+from .services import provision_device, purge_expired_launcher_data
+from apps.common.integrations import unix_launcher
+
+UNIX_PLATFORMS = {
+    "mac": ("render_macos_installer", "Install NAS Sign-out Cleanup.command"),
+    "linux": ("render_linux_installer", "install-nas-signout-cleanup.sh"),
+}
 
 LAUNCHER_INVALID_MESSAGE = (
     "This one-time setup link has expired or was already used. "
@@ -33,6 +41,7 @@ def _serialize(device: Device) -> dict:
         "is_revoked": device.is_revoked,
         "auto_revoked": device.auto_revoked,
         "launcher_available": device.launcher_available,
+        "unix_launcher_available": bool(device.unix_launcher_data),
         "owner_id": device.user_id,
     }
 
@@ -44,6 +53,7 @@ def _can_manage(request, device: Device) -> bool:
 @api_login_required
 @require_GET
 def device_list(request):
+    purge_expired_launcher_data()
     devices = Device.objects.select_related("user").all()
     if not request.user.is_admin:
         devices = devices.filter(user=request.user)
@@ -163,6 +173,31 @@ def device_launcher_cmd(request, device_id):
     response["Content-Disposition"] = 'attachment; filename="Connect Company Network.cmd"'
     return response
 
+@api_login_required
+@require_GET
+def device_launcher_unix(request, device_id, platform):
+    """macOS (.command) and Linux (.sh) setup files. Same owner and token rules as the Windows .cmd."""
+    if platform not in UNIX_PLATFORMS:
+        raise Http404
+    if not settings.NAS_IP or not settings.NAS_SHARE_NAME:
+        return error(404, "No launcher available for this device.")
+
+    device = get_object_or_404(Device, pk=device_id, user=request.user)
+    wg = device.unix_launcher_data
+    if wg is None:
+        return error(404, "No launcher available for this device.")
+
+    render_name, filename = UNIX_PLATFORMS[platform]
+    render = getattr(unix_launcher, render_name)
+    try:
+        body = render(settings.NAS_IP, device.wg_api_name, wg)
+    except ValueError:
+        return error(500, "The setup file could not be generated. Contact IT.")
+
+    response = HttpResponse(body, content_type="text/plain; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "no-store"
+    return response
 
 @require_GET
 def device_launcher_script(request, device_id):

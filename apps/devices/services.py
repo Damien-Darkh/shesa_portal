@@ -9,6 +9,47 @@ from apps.common.utils import utcnow
 
 from .models import Device
 
+UNIX_LAUNCHER_FIELDS = (
+    "private_key", "address_cidr", "dns", "peer_public_key",
+    "preshared_key", "endpoint", "allowed_ips", "keepalive",
+)
+
+def purge_expired_launcher_data(queryset=None):
+    """Clears stored WireGuard data for devices whose launcher window has closed."""
+    qs = queryset if queryset is not None else Device.objects.all()
+    return qs.filter(
+        launcher_wg_data__isnull=False,
+        launcher_token_expires_at__lt=utcnow(),
+    ).update(launcher_wg_data=None, launcher_token=None, launcher_script=None)
+    
+def provision_device(owner, device_name: str):
+    """Creates the WireGuard peer, the DB row and (if configured) the one-time launcher.
+    Raises wg_manager.WgApiError if the peer cannot be created."""
+    local_part = owner.email.split("@")[0]
+    result = wg_manager.create_peer(f"{local_part}_{device_name}")
+
+    device = Device.objects.create(
+        user=owner,
+        device_name=device_name,
+        wg_uuid=result["uuid"],
+        wg_api_name=result["api_name"],
+        wg_address=result["address"],
+    )
+
+    if settings.NAS_IP and settings.NAS_SHARE_NAME:
+        device.launcher_token = secrets.token_urlsafe(32)
+        device.launcher_script = windows_launcher.render_ps1(
+            device_id=device.id,
+            tunnel_name=result["api_name"],
+            nas_ip=settings.NAS_IP,
+            share_name=settings.NAS_SHARE_NAME,
+            wg=result,
+        )
+        device.launcher_wg_data = {k: result[k] for k in UNIX_LAUNCHER_FIELDS}
+        device.launcher_token_expires_at = utcnow() + timedelta(minutes=settings.LAUNCHER_TOKEN_TTL_MINUTES)
+        device.save()
+
+    return device, result
 
 def can_use_vpn(user) -> bool:
     """Admins always have VPN. Everyone else needs the per-employee flag."""
