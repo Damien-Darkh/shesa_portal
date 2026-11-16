@@ -1,6 +1,5 @@
 """Administrator endpoints: employee lifecycle, NAS and Authentik provisioning, roles, audit log."""
 import logging
-import re
 import secrets
 from datetime import date, timedelta
 
@@ -10,6 +9,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.common import identity_id as identity_gen
+from apps.common import passwords
 from apps.common.audit import record
 from apps.common.http import api_admin_required, error, ok, read_json
 from apps.common.integrations import authentik_manager, mailer, synology_manager
@@ -73,7 +73,6 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
             year = utcnow().year
             for leave_type in ("vacation", "sick", "personal"):
                 ensure_balance(user, year, leave_type)
-
             data["leave_balances"] = [
                 {"year": b.year, "leave_type": b.leave_type, "accrued_days": b.accrued_days,
                  "carryover_days": b.carryover_days, "used_days": b.used_days,
@@ -93,7 +92,6 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
 
 
 def _apply_profile(user, data) -> str | None:
-    """Writes the profile fields present in `data`. Returns an error message, or None on success."""
     if not any(k in data for k in PROFILE_FIELDS + ("department_id",)):
         return None
     profile, _ = UserProfile.objects.get_or_create(user=user)
@@ -121,7 +119,6 @@ def _apply_profile(user, data) -> str | None:
 
 
 def _apply_display_order(user, data) -> str | None:
-    """Sets display_order from the request. Empty clears it. Returns an error message or None."""
     raw = data["display_order"]
     if raw in (None, ""):
         user.display_order = None
@@ -137,17 +134,11 @@ def _apply_display_order(user, data) -> str | None:
 
 
 def _next_display_order() -> int:
-    """Next free slot in steps of 10, so people can be inserted later without renumbering."""
     last = User.objects.aggregate(m=Max("display_order"))["m"] or 0
     return last + DISPLAY_ORDER_STEP
 
 
 def _assign_identity_id(user) -> str | None:
-    """Gives the user an identity ID once. Never overwrites an existing ID.
-
-    Generated from the first and last name and the mobile number on the profile.
-    Returns a warning message if no ID could be created, otherwise None.
-    """
     if user.identity_id:
         return None
     profile = getattr(user, "profile", None)
@@ -165,46 +156,82 @@ def _assign_identity_id(user) -> str | None:
     return None
 
 
-def _nas_username(email: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]", "_", email.split("@")[0])[:32]
+class AccountError(Exception):
+    pass
 
 
-def _provision_authentik(user: User, first_name, last_name, make_admin: bool) -> tuple[str | None, str | None]:
+def _provision_authentik(user, first_name, last_name, make_admin, password) -> tuple[bool, str | None]:
+    """Returns (created, warning). The username is the email address."""
     if not settings.AUTHENTIK_API_URL:
-        return None, None
-    username = _nas_username(user.email)
-    if authentik_manager.user_exists(username):
-        return None, None
-    _pk, password = authentik_manager.create_user(
-        username=username, email=user.email, first_name=first_name, last_name=last_name, is_admin=make_admin,
-    )
+        return False, None
+    username = user.email
+    try:
+        if authentik_manager.user_exists(username):
+            return False, (f"Authentik sign-in account for {username} already exists. "
+                           "It was not created and its password was not changed.")
+        authentik_manager.create_user(
+            username=username, email=username, password=password,
+            first_name=first_name, last_name=last_name, is_admin=make_admin,
+        )
+    except authentik_manager.AuthentikApiError as exc:
+        return False, f"Portal account created, but Authentik sign-in account failed: {exc}"
     user.authentik_username = username
     user.save(update_fields=["authentik_username"])
-    return username, password
+    return True, None
 
 
-def _provision_nas(user: User, first_name, last_name, make_admin: bool) -> tuple[str | None, str | None]:
+def _provision_nas(user, first_name, last_name, make_admin, password) -> tuple[bool, str | None]:
+    """Returns (created, warning). The username is the email address."""
     if not settings.DSM_URL:
-        return None, None
+        return False, None
+    username = user.email
     group = synology_manager.DSM_ADMIN_GROUP if make_admin else synology_manager.DSM_SHARE_GROUP
-    username = _nas_username(user.email)
-    if synology_manager.user_exists(username):
-        return None, None
-    temp = synology_manager.create_user(
-        username=username, email=user.email, first_name=first_name, last_name=last_name, group=group,
-    )
+    try:
+        if synology_manager.user_exists(username):
+            return False, (f"NAS account for {username} already exists. "
+                           "It was not created and its password was not changed.")
+        synology_manager.create_user(
+            username=username, email=username, password=password,
+            first_name=first_name, last_name=last_name, group=group,
+        )
+    except synology_manager.DsmApiError as exc:
+        return False, f"Portal account created, but NAS account failed: {exc}"
     user.dsm_username = username
-    user.dsm_password_token = secrets.token_urlsafe(32)
+    user.dsm_password_token = None
     user.dsm_temp_password = None
-    user.dsm_password_expires_at = utcnow() + NAS_PASSWORD_TTL
-    user.dsm_must_change_password = True
+    user.dsm_password_expires_at = None
+    user.dsm_must_change_password = True  # the password must stay identical to Authentik's
     user.save()
-    return username, temp
+    return True, None
+
+
+def _set_shared_password(user, password: str) -> None:
+    """Sets the same password on every account the user has. Raises AccountError on failure."""
+    done = False
+    if settings.AUTHENTIK_API_URL and user.authentik_username:
+        try:
+            authentik_manager.set_password(user.authentik_username, password)
+        except authentik_manager.AuthentikApiError as exc:
+            raise AccountError(f"Could not set the Authentik password: {exc}") from exc
+        done = True
+    if settings.DSM_URL and user.dsm_username:
+        try:
+            synology_manager.reset_password(user.dsm_username, password)
+        except (synology_manager.DsmApiError, synology_manager.PasswordPolicyError) as exc:
+            raise AccountError(f"Could not set the NAS password: {exc}") from exc
+        user.dsm_must_change_password = True
+        user.dsm_temp_password = None
+        user.dsm_password_token = None
+        user.dsm_password_expires_at = None
+        user.save()
+        done = True
+    if not done:
+        raise AccountError("This user has no sign-in or NAS account to reset.")
 
 
 def _push_to_sanity(user) -> str | None:
     if not sanity_sync.is_enabled():
-        return None  # sync off: no warning, the employee is simply not on the website yet
+        return None
     try:
         sanity_sync.push_user(user)
     except sanity_sync.PushError as exc:
@@ -249,50 +276,47 @@ def users(request):
         return error(422, profile_error)
 
     warnings: list[str] = []
-
     identity_warning = _assign_identity_id(user)
     if identity_warning:
         warnings.append(identity_warning)
 
-    nas_username, temp_password = None, None
-    try:
-        nas_username, temp_password = _provision_nas(user, first_name, last_name, make_admin)
-    except synology_manager.DsmApiError as exc:
-        warnings.append(f"Portal account created, but NAS account failed: {exc}")
+    # One password for both systems. Generated once, never stored.
+    password = passwords.generate(avoid=email)
 
-    authentik_username, authentik_temp_password = None, None
-    try:
-        authentik_username, authentik_temp_password = _provision_authentik(
-            user, first_name, last_name, make_admin)
-    except authentik_manager.AuthentikApiError as exc:
-        warnings.append(f"Portal account created, but Authentik sign-in account failed: {exc}")
+    nas_ok, warning = _provision_nas(user, first_name, last_name, make_admin, password)
+    if warning:
+        warnings.append(warning)
+    auth_ok, warning = _provision_authentik(user, first_name, last_name, make_admin, password)
+    if warning:
+        warnings.append(warning)
 
-    if nas_username and temp_password:
+    issued = nas_ok or auth_ok
+    if issued:
         try:
             mailer.send_welcome_email(
-                recipient_email=email, username=nas_username, passphrase=temp_password,
+                recipient_email=email, password=password,
                 first_name=first_name, last_name=last_name,
             )
-        except Exception as exc:
-            warnings.append(f"Welcome email failed: {exc}")
+        except mailer.MailError as exc:
+            warnings.append(f"Welcome email not sent: {exc}")
+    else:
+        password = None
+        warnings.append("No sign-in or NAS account was created, so no password was issued "
+                        "and no welcome email was sent.")
 
     sanity_warning = _push_to_sanity(user)
     if sanity_warning:
         warnings.append(sanity_warning)
 
     record(request, "CREATE", "user", user.id, details={
-        "email": email,
-        "identity_id": user.identity_id,
-        "nas": bool(nas_username),
-        "authentik": bool(authentik_username),
-        "sanity": bool(user.sanity_id),
+        "email": email, "identity_id": user.identity_id,
+        "nas": nas_ok, "authentik": auth_ok, "sanity": bool(user.sanity_id),
     })
 
     return ok({
         "user": _serialize_user(user, detail=True),
-        "nas_temporary_password": temp_password,
-        "authentik_username": authentik_username,
-        "authentik_temporary_password": authentik_temp_password,
+        "nas_temporary_password": password if nas_ok else None,
+        "authentik_temporary_password": password if auth_ok else None,
         "warnings": warnings,
     }, status=201)
 
@@ -345,7 +369,6 @@ def user_detail(request, user_id):
     if "disabled" in data and user.id != request.user.id:
         now_disabled = bool(data["disabled"])
         if now_disabled and not user.disabled:
-            # Disabling removes VPN devices, administrator rights and VPN access.
             warnings += delete_all_devices(user)
             user.is_admin = False
             user.vpn_access = False
@@ -382,7 +405,6 @@ def user_detail(request, user_id):
 
     user.save()
 
-    # The identity ID is assigned only when missing. An existing ID is never changed here.
     if not user.identity_id:
         identity_warning = _assign_identity_id(user)
         if identity_warning:
@@ -404,8 +426,6 @@ def _delete_user(request, user):
     if user.id == request.user.id:
         return error(422, "You can't delete your own account.")
 
-    # 1. Sign-in account. If it can't be removed, the employee is kept, so a live
-    #    sign-in can't recreate them on next login.
     if settings.AUTHENTIK_API_URL and (user.authentik_username or user.email):
         try:
             authentik_manager.delete_account(user.authentik_username, user.email)
@@ -413,15 +433,12 @@ def _delete_user(request, user):
             return error(502, "Could not remove the Authentik sign-in account, so the employee "
                               f"was not deleted: {exc}")
 
-    # 2. Website record. Hidden, detached from projects, then deleted. If this fails the
-    #    employee is kept; the website page is already hidden, and the delete can be retried.
     try:
         sanity_sync.delete_person(user)
     except (sanity_client.SanityError, sanity_sync.PushError) as exc:
         return error(502, "Could not remove the website record, so the employee was not deleted. "
                           f"Their website page has been hidden. Retry the delete after fixing: {exc}")
 
-    # 3. Local data.
     warnings: list[str] = []
     warnings += delete_all_devices(user)
 
@@ -440,7 +457,6 @@ def _delete_user(request, user):
 @api_admin_required
 @require_POST
 def identity_id_replace(request, user_id):
-    """The only way to change an identity ID. Requires a reason and writes an audit entry."""
     user = get_object_or_404(User, pk=user_id)
     try:
         data = read_json(request)
@@ -487,7 +503,7 @@ def toggle_disabled(request, user_id):
 
     if settings.AUTHENTIK_API_URL and user.authentik_username:
         try:
-            authentik_manager.set_active(user.authentik_username, active=not user.disabled)
+            authentik_manager.set_active(user.authentik_username, user.email, active=not user.disabled)
         except authentik_manager.AuthentikApiError as exc:
             warnings.append(f"Portal status changed, but Authentik account was not updated: {exc}")
 
@@ -512,37 +528,36 @@ def toggle_admin(request, user_id):
 @api_admin_required
 @require_POST
 def reset_nas_password(request, user_id):
+    """Sets a new shared password on the NAS and Authentik account. Returns it once."""
     user = get_object_or_404(User, pk=user_id)
-    if not settings.DSM_URL or not user.dsm_username:
-        return error(422, "This user doesn't have a NAS account.")
+    password = passwords.generate(avoid=user.email)
     try:
-        new_password = synology_manager.reset_password(user.dsm_username)
-    except synology_manager.DsmApiError as exc:
-        return error(502, f"Could not reset NAS password: {exc}")
-    user.dsm_password_token = secrets.token_urlsafe(32)
-    user.dsm_temp_password = None
-    user.dsm_password_expires_at = utcnow() + NAS_PASSWORD_TTL
-    user.dsm_must_change_password = True
-    user.save()
-    record(request, "UPDATE", "nas_password", user.id, details={"reset_by_admin": True})
-    return ok({"nas_temporary_password": new_password, "must_change_password": True})
+        _set_shared_password(user, password)
+    except AccountError as exc:
+        return error(502, str(exc))
+    record(request, "UPDATE", "shared_password", user.id, details={"reset_by_admin": True})
+    return ok({
+        "nas_temporary_password": password,
+        "authentik_temporary_password": password if user.authentik_username else None,
+        "must_change_password": False,
+    })
 
 
 @api_admin_required
 @require_POST
 def reset_authentik_password(request, user_id):
+    """Same as reset_nas_password: both accounts always share one password."""
     user = get_object_or_404(User, pk=user_id)
-    if not settings.AUTHENTIK_API_URL or not user.authentik_username:
-        return error(422, "This user doesn't have an Authentik account on record.")
+    password = passwords.generate(avoid=user.email)
     try:
-        new_password = authentik_manager.reset_password(user.authentik_username)
-    except authentik_manager.AuthentikApiError as exc:
-        return error(502, f"Could not reset Authentik password: {exc}")
-    except Exception as exc:
-        logger.exception("Unexpected error resetting Authentik password for user %s", user.id)
-        return error(502, f"Could not reset Authentik password. Check the server log: {exc}")
-    record(request, "UPDATE", "authentik_password", user.id, details={"reset_by_admin": True})
-    return ok({"authentik_temporary_password": new_password})
+        _set_shared_password(user, password)
+    except AccountError as exc:
+        return error(502, str(exc))
+    record(request, "UPDATE", "shared_password", user.id, details={"reset_by_admin": True})
+    return ok({
+        "authentik_temporary_password": password,
+        "nas_temporary_password": password if user.dsm_username else None,
+    })
 
 
 @api_admin_required

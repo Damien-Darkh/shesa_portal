@@ -14,6 +14,7 @@ from apps.common.integrations import synology_manager
 from apps.common.integrations import sanity_sync
 from apps.common.integrations import sanity_photo, sanity_projects
 from apps.common.integrations.sanity_client import SanityError
+from apps.common.integrations import authentik_manager
 from apps.common.utils import utcnow
 from apps.core.services import profile_dict
 
@@ -224,10 +225,14 @@ def change_dsm_password(request):
     description = f"{user.first_name or ''} {user.last_name or ''}".strip()
     try:
         synology_manager.update_password(user.dsm_username, new_password, description=description)
+        if settings.AUTHENTIK_API_URL and user.authentik_username:
+            authentik_manager.set_password(user.authentik_username, new_password)
     except synology_manager.PasswordPolicyError as exc:
         return error(422, str(exc))
     except synology_manager.DsmApiError as exc:
         return error(502, f"Could not update NAS password: {exc}")
+    except authentik_manager.AuthentikApiError as exc:
+        return error(502, f"NAS password changed, but Authentik was not updated: {exc}")
 
     user.dsm_temp_password = None
     user.dsm_password_token = None

@@ -39,10 +39,10 @@ class User(AbstractBaseUser):
     # Stored separately from oidc_subject: this is the username the portal used
     # when it created the account via the Admin API, kept stable even if the
     # user's email changes later, so delete/disable actions target the right account.
-    authentik_username = models.CharField(max_length=150, null=True, blank=True, unique=True)
+    authentik_username = models.CharField(max_length=255, null=True, blank=True, unique=True)
 
     # Synology NAS
-    dsm_username = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    dsm_username = models.CharField(max_length=255, null=True, blank=True, unique=True)
     dsm_password_token = models.CharField(max_length=64, null=True, blank=True)
     dsm_temp_password = models.CharField(max_length=128, null=True, blank=True)
     dsm_password_expires_at = models.DateTimeField(null=True, blank=True)
