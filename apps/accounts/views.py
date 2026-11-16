@@ -42,12 +42,12 @@ def login_view(request):
 
 @require_GET
 def auth_config(request):
-    """Public. What the login page needs: where the sign-in starts and how the provider is named."""
     next_url = _safe_next(request.GET.get("next"))
     return ok({
         "sso_url": sso_login_url(next_url),
         "provider_name": settings.OIDC_PROVIDER_NAME,
         "sso_enabled": settings.USE_SSO,
+        "leave_management_enabled": settings.LEAVE_MANAGEMENT_ENABLED,
     })
 
 
@@ -96,6 +96,9 @@ def _serialize_me(user) -> dict:
         "sanity_last_error": user.sanity_last_error,
         "photo_url": sanity_photo.display_url(user),
         "identity_id": user.identity_id,
+        "leave_management_enabled": bool(settings.LEAVE_MANAGEMENT_ENABLED),
+        "can_use_vpn": bool(user.is_admin or user.vpn_access),
+        "vpn_access": bool(user.vpn_access),
     }
 
 def _push_to_sanity_warning(user) -> list[str]:

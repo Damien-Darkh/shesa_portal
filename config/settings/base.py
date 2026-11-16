@@ -16,6 +16,12 @@ def env_bool(name: str, default: bool) -> bool:
 def env_list(name: str, default: str) -> list[str]:
     return [h.strip() for h in os.environ.get(name, default).split(",") if h.strip()]
 
+LEAVE_MANAGEMENT_ENABLED = env_bool("LEAVE_MANAGEMENT_ENABLED", False)
+LEAVE_DEFAULT_DAYS = {
+    "vacation": float(os.environ.get("LEAVE_DEFAULT_VACATION_DAYS", "26")),
+    "sick": float(os.environ.get("LEAVE_DEFAULT_SICK_DAYS", "10")),
+    "personal": float(os.environ.get("LEAVE_DEFAULT_PERSONAL_DAYS", "4")),
+}
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 DEBUG = env_bool("DJANGO_DEBUG", False)

@@ -1,4 +1,5 @@
-// Dashboard: profile card, notifications (marked read after 2s on screen), own VPN devices (if entitled).
+// Dashboard: profile card, notifications (marked read after 2s on screen), own VPN devices (if entitled),
+// and leave widgets (only when LEAVE_MANAGEMENT_ENABLED is on).
 import { ready, dbData, markNotificationsRead, refreshIcons, showFlash, confirmDialog, fmtDate, renderAvatar, getUnreadCount, updateNotificationBadge, t } from '../layout.js';
 import { api } from '../api.js';
 import { refreshMe } from '../store.js';
@@ -7,6 +8,7 @@ import { refreshMe } from '../store.js';
   if (!await ready) return;
   const $ = id => document.getElementById(id);
   const user = dbData.currentUser;
+  const leaveOn = !!user.leave_management_enabled;
 
   // Show any message left by a redirect (e.g. from add_device.js).
   const flash = sessionStorage.getItem('portal.flash');
@@ -25,6 +27,9 @@ import { refreshMe } from '../store.js';
   renderAvatar(document.querySelector('.avatar-box'), {
     photoUrl: user.profile.photo_url, firstName: user.first_name, lastName: user.last_name,
   });
+
+  /* Leave widgets: hidden entirely when the feature flag is off. */
+  document.querySelectorAll('.leave-only').forEach(el => { el.hidden = !leaveOn; });
 
   /* Notifications */
   const notifList = $('notifications-list'), countBadge = $('unread-count');

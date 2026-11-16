@@ -12,8 +12,9 @@ urlpatterns = [
     path("", include("apps.accounts.urls")),
     path("api/", include("apps.core.urls")),
     path("api/devices/", include("apps.devices.urls")),
-    path("api/pto/", include("apps.pto.urls")),
     path("api/admin/", include("apps.accounts.admin_urls")),
+    # Leave management: only mounted when the flag is on
+    *([path("api/pto/", include("apps.pto.urls"))] if settings.LEAVE_MANAGEMENT_ENABLED else []),
     # Frontend (same origin). Static assets, then HTML pages behind login.
     path("favicon.ico", RedirectView.as_view(url="/logo.svg", permanent=True)),
     path("", pages.root),

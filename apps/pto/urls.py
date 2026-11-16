@@ -10,4 +10,5 @@ urlpatterns = [
     path("requests/<int:leave_id>/approve", views.request_approve, name="pto_request_approve"),
     path("requests/<int:leave_id>/reject", views.request_reject, name="pto_request_reject"),
     path("requests/<int:leave_id>/cancel", views.request_cancel, name="pto_request_cancel"),
+    path("requests/<int:leave_id>/edit", views.request_edit, name="pto_request_edit"),
 ]

@@ -39,8 +39,8 @@
 
     <div class="tabs" role="tablist" aria-label="Admin sections" id="admin-tabs">
       <button type="button" class="tab" role="tab" id="tab-employees" aria-controls="panel-employees" data-tab="employees"><i data-lucide="users"></i> Employees</button>
-      <button type="button" class="tab" role="tab" id="tab-leave" aria-controls="panel-leave" data-tab="leave"><i data-lucide="clipboard-check"></i> Leave approvals <span class="badge js-leave-badge" hidden></span></button>
-      <button type="button" class="tab" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar"><i data-lucide="calendar-days"></i> Leave calendar</button>
+      <button type="button" class="tab leave-only" role="tab" id="tab-leave" aria-controls="panel-leave" data-tab="leave"><i data-lucide="clipboard-check"></i> Leave approvals <span class="badge js-leave-badge" hidden></span></button>
+      <button type="button" class="tab leave-only" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar"><i data-lucide="calendar-days"></i> Leave calendar</button>
       <button type="button" class="tab" role="tab" id="tab-departments" aria-controls="panel-departments" data-tab="departments"><i data-lucide="building-2"></i> Departments</button>
     </div>
 
@@ -55,7 +55,7 @@
     </section>
 
     <!-- Leave approvals -->
-    <section class="card space-y" id="panel-leave" role="tabpanel" aria-labelledby="tab-leave" hidden>
+    <section class="card space-y leave-only" id="panel-leave" role="tabpanel" aria-labelledby="tab-leave" hidden>
       <div class="row-between" style="align-items:center;">
         <p class="card-subtitle" style="margin:0;">You can't approve your own request; another admin has to.</p>
         <div class="btn-row">
@@ -72,7 +72,7 @@
     </section>
 
     <!-- Leave calendar -->
-    <section class="card space-y" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar" hidden>
+    <section class="card space-y leave-only" id="panel-calendar" role="tabpanel" aria-labelledby="tab-calendar" hidden>
       <div class="cal-controls">
         <select id="cal-employee" class="form-input" aria-label="Filter by employee"><option value="">All employees</option></select>
         <label class="checkbox-row" style="margin:0;"><input type="checkbox" id="cal-pending" checked> Show pending requests</label>
@@ -97,7 +97,7 @@
   </main>
 
   <!-- Leave details pop-up -->
-  <div id="leave-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lm-title">
+  <div id="leave-modal" class="modal-overlay hidden leave-only" role="dialog" aria-modal="true" aria-labelledby="lm-title">
     <div class="modal-card">
       <div class="row-between" style="align-items:flex-start;flex-wrap:nowrap;">
         <div style="min-width:0;">

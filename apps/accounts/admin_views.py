@@ -1,4 +1,5 @@
 """Administrator endpoints: employee lifecycle, NAS and Authentik provisioning, roles, audit log."""
+import logging
 import re
 import secrets
 from datetime import date, timedelta
@@ -21,12 +22,18 @@ from apps.devices.services import can_use_vpn, delete_all_devices, set_vpn_acces
 
 from .models import AuditLog, Role, User
 
+logger = logging.getLogger(__name__)
+
 NAS_PASSWORD_TTL = timedelta(minutes=15)
 PROFILE_FIELDS = ("job_title", "phone", "office_location", "bio", "photo_url", "start_date")
 DISPLAY_ORDER_STEP = 10
 
 
 # ---------------------------------------------------------------- helpers
+
+def _leave_enabled() -> bool:
+    return bool(settings.LEAVE_MANAGEMENT_ENABLED)
+
 
 def _serialize_user(user: User, detail: bool = False) -> dict:
     data = {
@@ -51,28 +58,37 @@ def _serialize_user(user: User, detail: bool = False) -> dict:
         "sanity_last_error": user.sanity_last_error,
     }
     if detail:
-        from apps.pto.models import LeaveBalance, LeaveRequest
-
         data["roles"] = [r.name for r in user.roles.all()]
         data["dsm_must_change_password"] = bool(user.dsm_must_change_password)
-        data["leave_balances"] = [
-            {"year": b.year, "leave_type": b.leave_type, "accrued_days": b.accrued_days,
-             "carryover_days": b.carryover_days, "used_days": b.used_days,
-             "pending_days": b.pending_days, "available_days": b.available_days}
-            for b in LeaveBalance.objects.filter(user=user).order_by("-year", "leave_type")
-        ]
-        data["leave_requests"] = [
-            {"id": r.id, "leave_type": r.leave_type, "start_date": r.start_date.isoformat(),
-             "end_date": r.end_date.isoformat(), "days_requested": r.days_requested, "reason": r.reason,
-             "status": r.status, "approver_comment": r.approver_comment, "created_at": r.created_at.isoformat()}
-            for r in LeaveRequest.objects.filter(user=user).order_by("-created_at")[:200]
-        ]
         data["devices"] = [
             {"id": d.id, "device_name": d.device_name, "is_revoked": d.is_revoked,
              "auto_revoked": d.auto_revoked, "wg_address": d.wg_address,
              "created_at": d.created_at.isoformat()}
             for d in Device.objects.filter(user=user)
         ]
+        if _leave_enabled():
+            from apps.pto.models import LeaveBalance, LeaveRequest
+            from apps.pto.services import ensure_balance
+
+            year = utcnow().year
+            for leave_type in ("vacation", "sick", "personal"):
+                ensure_balance(user, year, leave_type)
+
+            data["leave_balances"] = [
+                {"year": b.year, "leave_type": b.leave_type, "accrued_days": b.accrued_days,
+                 "carryover_days": b.carryover_days, "used_days": b.used_days,
+                 "pending_days": b.pending_days, "available_days": b.available_days}
+                for b in LeaveBalance.objects.filter(user=user, year=year).order_by("leave_type")
+            ]
+            data["leave_requests"] = [
+                {"id": r.id, "leave_type": r.leave_type, "start_date": r.start_date.isoformat(),
+                 "end_date": r.end_date.isoformat(), "days_requested": r.days_requested, "reason": r.reason,
+                 "status": r.status, "approver_comment": r.approver_comment, "created_at": r.created_at.isoformat()}
+                for r in LeaveRequest.objects.filter(user=user).order_by("-created_at")[:200]
+            ]
+        else:
+            data["leave_balances"] = []
+            data["leave_requests"] = []
     return data
 
 
@@ -527,6 +543,7 @@ def reset_authentik_password(request, user_id):
         return error(502, f"Could not reset Authentik password. Check the server log: {exc}")
     record(request, "UPDATE", "authentik_password", user.id, details={"reset_by_admin": True})
     return ok({"authentik_temporary_password": new_password})
+
 
 @api_admin_required
 @require_GET

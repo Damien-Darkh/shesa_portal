@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from apps.common.integrations import sanity_client
 from apps.common.integrations.sanity_client import SanityError
+from apps.common.integrations.rich_text import html_to_blocks as _to_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ RESERVED_SLUGS = {
     "search", "studio",
 }
 
+_MARK_RE = re.compile(r"(\*\*.+?\*\*|\*.+?\*|\[[^\]]+\]\(https?://[^\s)]+\))")
 
 class PushError(Exception):
     """A push failed. `retryable` tells the retry job whether another attempt can help."""
@@ -84,15 +86,75 @@ def _make_slug(name: str, identity_id: str) -> str:
     return base[:90]
 
 
+def _spans(text: str) -> list:
+    """Splits inline markup into Portable Text spans with marks."""
+    spans, pos = [], 0
+    for m in _MARK_RE.finditer(text):
+        if m.start() > pos:
+            spans.append({"_type": "span", "_key": secrets.token_hex(6), "text": text[pos:m.start()], "marks": []})
+        token = m.group(0)
+        if token.startswith("**"):
+            spans.append({"_type": "span", "_key": secrets.token_hex(6), "text": token[2:-2], "marks": ["strong"]})
+        elif token.startswith("["):
+            label, url = re.match(r"\[([^\]]+)\]\((.+)\)", token).groups()
+            key = secrets.token_hex(6)
+            spans.append({"_type": "span", "_key": secrets.token_hex(6), "text": label, "marks": [key]})
+            # The link definition is added to markDefs by the caller (see _to_blocks).
+            spans[-1]["_link"] = {"_key": key, "_type": "link", "href": url}
+        else:
+            spans.append({"_type": "span", "_key": secrets.token_hex(6), "text": token[1:-1], "marks": ["em"]})
+        pos = m.end()
+    if pos < len(text):
+        spans.append({"_type": "span", "_key": secrets.token_hex(6), "text": text[pos:], "marks": []})
+    return spans or [{"_type": "span", "_key": secrets.token_hex(6), "text": "", "marks": []}]
+
+
 def _to_blocks(text: str | None) -> list:
-    """Portable Text for the full profile. Always a list, never null (Sanity rejects null here)."""
+    """Portable Text for the full profile. Understands the simple markup from the profile editor:
+    **bold**, *italic*, [link](https://...), '## Heading', '- bullet' and '1. numbered'."""
     if not text or not text.strip():
         return []
-    return [{
-        "_type": "block", "_key": secrets.token_hex(6), "style": "normal", "markDefs": [],
-        "children": [{"_type": "span", "_key": secrets.token_hex(6), "text": para.strip(), "marks": []}],
-    } for para in text.split("\n\n") if para.strip()]
+    blocks, group = [], None
 
+    def finish_list():
+        nonlocal group
+        if group:
+            blocks.extend(group["items"])
+            group = None
+
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line:
+            finish_list()
+            continue
+        m = re.match(r"^(?:[-*]|\d+\.)\s+(.*)$", line)
+        if m and (line[0] in "-*" or line[0].isdigit()):
+            style = "bullet" if line[0] in "-*" else "number"
+            if not group or group["style"] != style:
+                finish_list()
+                group = {"style": style, "items": []}
+            group["items"].append({
+                "_type": "block", "_key": secrets.token_hex(6), "style": "normal",
+                "listItem": style, "level": 1, "markDefs": [], "children": _spans(m.group(1)),
+            })
+            continue
+        finish_list()
+        if line.startswith("## "):
+            blocks.append({"_type": "block", "_key": secrets.token_hex(6), "style": "h3",
+                           "markDefs": [], "children": _spans(line[3:])})
+        else:
+            blocks.append({"_type": "block", "_key": secrets.token_hex(6), "style": "normal",
+                           "markDefs": [], "children": _spans(line)})
+    finish_list()
+
+    for block in blocks:
+        defs = []
+        for child in block["children"]:
+            link = child.pop("_link", None)
+            if link:
+                defs.append(link)
+        block["markDefs"] = defs
+    return blocks
 
 def _team_values(user) -> dict:
     """Current portal values for every mapped field, keyed by Sanity field name."""

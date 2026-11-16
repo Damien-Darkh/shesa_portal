@@ -8,6 +8,25 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="components.css">
   <script src="./vendor/lucide.min.js"></script>
+  <style>
+    .rt-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .5rem; }
+    .rt-toolbar .rt-sep { width: 1px; background: var(--border-color); margin: 0 .2rem; }
+    .rt-editor { min-height: 14rem; padding: .875rem 1rem; border: 1px solid var(--border-color);
+      border-radius: .75rem; background: #fff; font-size: .9375rem; line-height: 1.6; color: #334155;
+      overflow-wrap: anywhere; }
+    .rt-editor:empty::before { content: attr(data-placeholder); color: var(--text-muted); }
+    .rt-editor:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,95,148,.2); }
+    .rt-editor h2 { font-size: 1.35rem; font-weight: 700; margin: 1rem 0 .4rem; color: #1a1a1a; }
+    .rt-editor h3 { font-size: 1.15rem; font-weight: 700; margin: .85rem 0 .35rem; color: #1a1a1a; }
+    .rt-editor h4 { font-size: 1rem; font-weight: 700; margin: .75rem 0 .3rem; color: #1a1a1a; }
+    .rt-editor p { margin: .4rem 0; }
+    .rt-editor ul, .rt-editor ol { margin: .4rem 0 .4rem 1.5rem; }
+    .rt-editor ul { list-style: disc; } .rt-editor ol { list-style: decimal; }
+    .rt-editor li { margin: .15rem 0; }
+    .rt-editor blockquote { margin: .6rem 0; padding: .2rem 0 .2rem .9rem; border-left: 3px solid #cbd5e1; color: #475569; }
+    .rt-editor code { background: #f1f5f9; padding: .1rem .35rem; border-radius: .3rem; font-family: ui-monospace, Consolas, monospace; font-size: .875em; }
+    .rt-editor a { color: var(--accent-text); text-decoration: underline; }
+  </style>
 </head>
 <body>
 <header id="site-header"></header>
@@ -137,9 +156,31 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="w-text">Full profile</label>
-        <textarea id="w-text" rows="6" class="form-input" maxlength="4000"></textarea>
-        <span class="form-hint">Shown on your own page on the website.</span>
+        <span class="form-label" id="w-text-label">Full profile</span>
+        <div class="rt-toolbar" id="w-toolbar" role="toolbar" aria-label="Text formatting">
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="bold" title="Bold" aria-label="Bold"><strong>B</strong></button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="italic" title="Italic" aria-label="Italic"><em>I</em></button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="underline" title="Underline" aria-label="Underline"><u>U</u></button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><s>S</s></button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="code" title="Code" aria-label="Code">&lt;/&gt;</button>
+          <span class="rt-sep" aria-hidden="true"></span>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="h2" title="Title" aria-label="Title">Title</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="h3" title="Heading" aria-label="Heading">Heading</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="h4" title="Subheading" aria-label="Subheading">Subheading</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="p" title="Normal text" aria-label="Normal text">Text</button>
+          <span class="rt-sep" aria-hidden="true"></span>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="insertUnorderedList" title="Bullet list" aria-label="Bullet list">&bull; List</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list">1. List</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="indent" title="Indent (nested list)" aria-label="Indent">&rarr;</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="outdent" title="Outdent" aria-label="Outdent">&larr;</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="blockquote" title="Quote" aria-label="Quote">&ldquo; Quote</button>
+          <span class="rt-sep" aria-hidden="true"></span>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="link" title="Add link" aria-label="Add link">Link</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="unlink" title="Remove link" aria-label="Remove link">Unlink</button>
+          <button type="button" class="btn btn-outline btn-sm" data-cmd="removeFormat" title="Clear formatting" aria-label="Clear formatting">Clear</button>
+        </div>
+        <div class="rt-editor" id="w-text" aria-labelledby="w-text-label" data-placeholder="Write about yourself…"></div>
+        <span class="form-hint">Select text, then press a button. Pasted Markdown is converted automatically. Shown on your own page on the website.</span>
       </div>
 
       <p class="error-text" id="web-error" role="alert" hidden></p>

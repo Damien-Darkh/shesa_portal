@@ -1,7 +1,8 @@
 // My profile: contact details and website profile are editable by the employee.
 // Job details are read-only (HR manages them). Publishing on the website needs explicit consent.
-import { ready, dbData, showFlash, getLang, setLang, refreshIcons, renderAvatar, t } from '../layout.js';
+import { ready, dbData, showFlash, getLang, setLang, refreshIcons, renderAvatar, promptDialog, t } from '../layout.js';
 import { api } from '../api.js';
+import { createEditor } from '../richtext.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -10,6 +11,22 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const $ = id => document.getElementById(id);
   const user = dbData.currentUser;
   let me = await api('/api/me/');   // extended fields (emails, LinkedIn, website) live here
+
+  /* ---------- Rich text editor (a failure here must never blank the rest of the page) ---------- */
+  let editor = null;
+  try {
+    editor = createEditor($('w-text'), $('w-toolbar'), {
+      askUrl: () => promptDialog({
+        title: t('Add link'),
+        message: t('Enter the web address, starting with https://'),
+        label: t('Web address'),
+        placeholder: 'https://',
+      }),
+    });
+  } catch (err) {
+    console.error('Rich text editor failed to start:', err);
+    showFlash(t('The text editor could not start. Reload the page.'), 'error');
+  }
 
   /* ---------- Language ---------- */
   const langSel = $('lang-select');
@@ -158,16 +175,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     }
   });
 
-  // Initial state
-  renderPhoto(me.photo_url);
-  try {
-    projectCatalog = (await api('/api/me/projects/')).projects;
-  } catch (ex) {
-    $('project-error').textContent = t(ex.message);
-    $('project-error').hidden = false;
-  }
-  renderProjects();
-
   /* ---------- Render editable state from the server ---------- */
   function render() {
     $('c-phone').value = me.profile.phone || '';
@@ -176,7 +183,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     $('w-show').checked = !!me.show_on_website;
     $('w-bio').value = me.profile.bio || '';
-    $('w-text').value = me.profile_text || '';
+    if (editor) editor.setHTML(me.profile_text || '');
     $('w-consent').checked = false;
     updateConsentBox();
 
@@ -245,12 +252,22 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const body = {
       show_on_website: wantOn,
       bio: $('w-bio').value.trim(),
-      profile_text: $('w-text').value.trim(),
     };
+    // If the editor failed to start, leave the stored profile text untouched instead of erasing it.
+    if (editor) body.profile_text = editor.getHTML();
     if (newlyPublishing) body.website_consent = true;
     save(body, err, e.submitter);
   });
 
+  /* ---------- Initial state ---------- */
   render();
+  renderPhoto(me.photo_url);
   refreshIcons();
+  try {
+    projectCatalog = (await api('/api/me/projects/')).projects;
+  } catch (ex) {
+    $('project-error').textContent = t(ex.message);
+    $('project-error').hidden = false;
+  }
+  renderProjects();
 })();

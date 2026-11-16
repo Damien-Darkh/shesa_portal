@@ -82,6 +82,22 @@
         </button>
       </section>
 
+      <!-- Leave balances (admin only, shown when LEAVE_MANAGEMENT_ENABLED is on) -->
+      <section class="card space-y leave-only" id="bal-card">
+        <div class="card-header">
+          <h3 class="card-title">Leave balances</h3>
+          <p class="card-subtitle">Current year. Edit the allowance or carryover; remaining days are recalculated.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr><th>Type</th><th>Allowance</th><th>Carryover</th><th>Used</th><th>Pending</th><th>Remaining</th><th></th></tr>
+            </thead>
+            <tbody id="bal-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+      
       <!-- NAS -->
       <section class="card space-y" id="nas-card" hidden>
         <div class="card-header"><h3 class="card-title">NAS account</h3><p class="card-subtitle">NAS username: <strong class="mono" id="nas-user" data-no-i18n></strong></p></div>

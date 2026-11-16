@@ -1,5 +1,5 @@
-// store.js - the in-memory state every page reads (same shape as the former mock data.js).
-// It is filled from the API at page load and refreshed after changes. Nothing is persisted in the browser.
+// store.js - the in-memory state every page reads. Filled from the API at page load and refreshed after changes.
+// Nothing is persisted in the browser. Leave data is only fetched when LEAVE_MANAGEMENT_ENABLED is on.
 import { api } from './api.js';
 
 export const dbData = {
@@ -22,6 +22,7 @@ export async function refreshMe() {
     id: me.id, email: me.email, first_name: me.first_name, last_name: me.last_name,
     is_admin: me.is_admin, disabled: me.disabled, language: me.language,
     vpn_access: !!me.vpn_access, can_use_vpn: !!me.can_use_vpn,
+    leave_management_enabled: !!me.leave_management_enabled,
     dsm_username: me.dsm_username, dsm_must_change_password: me.dsm_must_change_password,
     roles: (me.roles || []).map(name => ({ name })), profile: me.profile, devices,
     identity_id: me.identity_id,
@@ -29,6 +30,8 @@ export async function refreshMe() {
   try { localStorage.setItem('portal.lang', me.language || 'it'); } catch { /* storage unavailable */ }
   return dbData.currentUser;
 }
+
+const leaveOn = () => !!dbData.currentUser?.leave_management_enabled;
 
 export async function refreshPeople() {
   const { people } = await api('/api/people/');
@@ -42,12 +45,14 @@ export async function refreshDepartments() {
 }
 
 export async function refreshLeave() {
+  if (!leaveOn()) { dbData.leaveRequests = []; return []; }
   const path = dbData.currentUser?.is_admin ? '/api/pto/requests/?scope=team' : '/api/pto/requests/';
   dbData.leaveRequests = (await api(path)).requests;
   return dbData.leaveRequests;
 }
 
 export async function refreshBalances() {
+  if (!leaveOn()) { dbData.leaveBalances = []; return []; }
   const { balances } = await api('/api/pto/balances/');
   dbData.leaveBalances = balances.map(b => ({ ...b, user_id: dbData.currentUser?.id }));
   return dbData.leaveBalances;

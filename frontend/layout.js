@@ -179,16 +179,13 @@ export const ready = loadSession()
 const LOGO_SRC = './logo_full.svg';
 const LOGOUT_HREF = '/logout';
 
-// filename -> which nav item is highlighted
+// Base navigation. The Calendar item is added in buildHeader() only when LEAVE_MANAGEMENT_ENABLED is on.
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', href: 'index.html',     icon: 'layout-dashboard' },
   { key: 'directory', label: 'Directory', href: 'directory.html', icon: 'users' },
-  // Leave — disabled for now. Re-enable together with the Leave sections in index.html:
-  // { key: 'calendar',  label: 'Calendar',  href: 'calander.html',  icon: 'calendar-days' },
-  // Departments — disabled for now. Also uncomment the departments.html entry in PAGE_TO_NAV:
-  // { key: 'departments', label: 'Departments', href: 'departments.html', icon: 'building-2' },
   { key: 'profile',   label: 'Profile',   href: 'profile.html',   icon: 'user' },
 ];
+const CALENDAR_ITEM = { key: 'calendar', label: 'Calendar', href: 'calander.html', icon: 'calendar-days' };
 const ADMIN_ITEM = { key: 'admin', label: 'Admin Panel', href: 'admin.html', icon: 'shield' };
 
 const PAGE_TO_NAV = {
@@ -196,14 +193,15 @@ const PAGE_TO_NAV = {
   'add_device.html': 'dashboard',
   'device_created.html': 'dashboard',
   'directory.html': 'directory',
-  // 'calander.html': 'calendar',
-  // 'departments.html': 'departments',
+  'calander.html': 'calendar',
   'profile.html': 'profile',
   'change_dsm_password.html': 'profile',
   'admin.html': 'admin',
   'add_user.html': 'admin',
   'edit_user.html': 'admin',
   'admin_user_created.html': 'admin',
+  'admin_department.html': 'admin',
+  'person.html': 'directory',
 };
 
 /** Reads an image file as a data URL (stored as the profile photo). Size is limited to keep rows small. */
@@ -292,7 +290,7 @@ export function refreshIcons() {
 
 /**
  * Flash message, same look as base.html's .flash block.
- * category: 'success' | 'error'
+ * category: 'success' | 'error' | 'info' | 'warning'
  */
 export function showFlash(message, category = 'success', { timeout = 5000 } = {}) {
   let host = document.getElementById('flash-host');
@@ -357,8 +355,10 @@ function navLink(item, activeKey) {
 function buildHeader() {
   const user = dbData.currentUser;
   const activeKey = PAGE_TO_NAV[currentPage()] || null;
+  const leaveOn = !!user?.leave_management_enabled;
 
   const items = [...NAV_ITEMS];
+  if (leaveOn) items.splice(2, 0, CALENDAR_ITEM);   // before Profile
   if (user && user.is_admin) items.push(ADMIN_ITEM);
 
   // Brand
@@ -560,4 +560,3 @@ export function setupBackLink(a, { fallbackHref, fallbackLabel, adminHash = '', 
   const text = [...a.childNodes].reverse().find(n => n.nodeType === 3);
   if (text) text.nodeValue = ` ${label}`;
 }
-

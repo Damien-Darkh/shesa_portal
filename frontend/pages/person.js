@@ -1,7 +1,7 @@
 // Colleague profile. Everyone sees the public part. Administrators also get account, organisation,
-// devices and leave history from /api/admin/users/<id>/.
-import { ready, dbData, getIdParam, fullName, renderAvatar, esc, fmtDate, getLang, refreshIcons, confirmDialog, showFlash, setupBackLink, t } from '../layout.js';
-import { api, ApiError } from '../api.js';
+// devices and leave history (with edit for approved leave) from /api/admin/users/<id>/.
+import { ready, dbData, getIdParam, fullName, renderAvatar, esc, fmtDate, getLang, refreshIcons, confirmDialog, showFlash, setupBackLink, trapFocus, t } from '../layout.js';
+import { api } from '../api.js';
 
 (async () => {
   if (!await ready) return;
@@ -77,7 +77,6 @@ import { api, ApiError } from '../api.js';
     kv('Authentik username', detail.authentik_account ? mono(detail.authentik_account) : 'Not provisioned') +
     kv('VPN access', detail.is_admin ? t('Administrators always have VPN access') : (u.vpn_access ? t('Yes') : t('No'))) +
     kv('Devices', `${devices.filter(d => !d.is_revoked).length} / ${devices.length}`);
-    
 
   const chain = []; for (let q = dept, n = 0; q && n < 20; q = dbData.departments.find(x => x.id === q.parent_id), n++) chain.unshift(q.name);
   const mgr = dept && dbData.usersDirectory.find(x => x.id === dept.manager_id);
@@ -94,14 +93,103 @@ import { api, ApiError } from '../api.js';
     <td>${d.is_revoked ? pill('status--off', d.auto_revoked ? 'Disconnected (account disabled)' : 'Disconnected') : pill('status--active', '<span class="pulse"></span>Active')}</td></tr>`).join('')
     : '<tr><td colspan="4"><div class="empty-state"><i data-lucide="inbox"></i><span>No devices.</span></div></td></tr>';
 
-  const bal = detail.leave_balances || [];
-  $('adm-balances').hidden = !bal.length;
-  $('adm-bal-body').innerHTML = bal.map(b => `<tr><td>${esc(cap(b.leave_type))}</td><td>${b.accrued_days}</td><td>${b.carryover_days}</td><td>${b.used_days}</td><td>${b.pending_days}</td>
-    <td><strong>${b.available_days}</strong></td></tr>`).join('');
+  /* Leave history. Approved rows can be edited by the administrator. */
   const reqs = detail.leave_requests || [];
-  $('adm-leave').innerHTML = reqs.length ? reqs.map(r => { const k = kind(r.status); return `<tr><td>${esc(cap(r.leave_type))}</td><td>${fmtDate(r.start_date)} &rarr; ${fmtDate(r.end_date)}</td><td>${r.days_requested}</td>
-    <td style="white-space:normal;min-width:10rem;">${esc(r.reason || '')}${k === 'denied' && r.approver_comment ? `<div class="form-hint">${esc(r.approver_comment)}</div>` : ''}</td>
-    <td>${pill('status--' + k, label[k])}</td></tr>`; }).join('')
-    : '<tr><td colspan="5"><div class="empty-state"><i data-lucide="inbox"></i><span>No leave requests.</span></div></td></tr>';
+  $('adm-leave').innerHTML = reqs.length ? reqs.map(r => {
+    const k = kind(r.status);
+    const action = k === 'approved'
+      ? `<button type="button" class="btn btn-outline btn-sm" data-leave-edit="${r.id}"><i data-lucide="pencil"></i> ${t('Edit')}</button>`
+      : '';
+    return `<tr>
+      <td>${esc(cap(r.leave_type))}</td>
+      <td>${fmtDate(r.start_date)} &rarr; ${fmtDate(r.end_date)}</td>
+      <td>${r.days_requested}</td>
+      <td style="white-space:normal;min-width:10rem;">${esc(r.reason || '')}${k === 'denied' && r.approver_comment ? `<div class="form-hint">${esc(r.approver_comment)}</div>` : ''}</td>
+      <td>${pill('status--' + k, label[k])}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('')
+    : '<tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><span>No leave requests.</span></div></td></tr>';
+
+  // Event delegation: re-rendering never stacks listeners.
+  $('adm-leave').onclick = async e => {
+    const btn = e.target.closest('button[data-leave-edit]');
+    if (!btn) return;
+    const req = reqs.find(r => r.id === Number(btn.dataset.leaveEdit));
+    if (!req) return;
+    const edited = await editLeaveDialog(req);
+    if (!edited) return;
+    try {
+      await api(`/api/pto/requests/${req.id}/edit`, { method: 'PATCH', body: edited });
+      showFlash(t('Leave request updated.'), 'success');
+      location.reload();
+    } catch (err) { showFlash(err.message, 'error'); }
+  };
+
   refreshIcons();
 })();
+
+/* Dialog for editing an approved leave request. Resolves with the new values, or null if cancelled. */
+function editLeaveDialog(req) {
+  return new Promise(resolve => {
+    const prev = document.activeElement;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'le-title');
+    overlay.innerHTML = `
+      <div class="modal-card" style="max-width:30rem;">
+        <h3 class="modal-title" id="le-title">${t('Edit approved leave')}</h3>
+        <p class="modal-description">${t("Changing the dates or days updates the employee's remaining balance.")}</p>
+        <form id="le-form" class="space-y" style="margin-top:1.25rem;" novalidate>
+          <div class="form-group"><label class="form-label" for="le-start">${t('Start date')}</label>
+            <input type="date" id="le-start" class="form-input" value="${req.start_date}" required></div>
+          <div class="form-group"><label class="form-label" for="le-end">${t('End date')}</label>
+            <input type="date" id="le-end" class="form-input" value="${req.end_date}" required></div>
+          <div class="form-group"><label class="form-label" for="le-days">${t('Days')}</label>
+            <input type="number" id="le-days" class="form-input" step="0.5" min="0.5" value="${req.days_requested}" required></div>
+          <div class="form-group"><label class="form-label" for="le-reason">${t('Reason (optional)')}</label>
+            <textarea id="le-reason" class="form-input" rows="2" maxlength="300">${esc(req.reason || '')}</textarea></div>
+          <p class="error-text" id="le-error" role="alert" hidden></p>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="le-cancel">${t('Cancel')}</button>
+            <button type="submit" class="btn btn-primary" style="margin-top:0;">${t('Save changes')}</button>
+          </div>
+        </form>
+      </div>`;
+    document.body.append(overlay);
+    document.body.style.overflow = 'hidden';
+
+    const finish = v => {
+      overlay.remove();
+      document.body.style.overflow = '';
+      if (prev && prev.focus) prev.focus();
+      resolve(v);
+    };
+    overlay.querySelector('#le-cancel').addEventListener('click', () => finish(null));
+    overlay.addEventListener('click', e => { if (e.target === overlay) finish(null); });
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Escape') finish(null);
+      else trapFocus(overlay, e);
+    });
+    overlay.querySelector('#le-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const err = overlay.querySelector('#le-error');
+      const showErr = msg => { err.textContent = msg; err.hidden = false; };
+      const start = overlay.querySelector('#le-start').value;
+      const end = overlay.querySelector('#le-end').value;
+      const days = Number(overlay.querySelector('#le-days').value);
+      if (!start || !end) return showErr(t('Choose both dates.'));
+      if (end < start) return showErr(t("The end date can't be before the start date."));
+      if (!Number.isFinite(days) || days <= 0 || (days * 2) % 1 !== 0) return showErr(t('Days must be a positive multiple of 0.5.'));
+      finish({
+        start_date: start,
+        end_date: end,
+        days_requested: days,
+        reason: overlay.querySelector('#le-reason').value.trim(),
+      });
+    });
+    overlay.querySelector('#le-start').focus();
+  });
+}

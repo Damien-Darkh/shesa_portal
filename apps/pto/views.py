@@ -1,8 +1,7 @@
 """Leave endpoints (JSON)."""
 from datetime import date
 
-
-
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
@@ -11,7 +10,7 @@ from apps.common.http import api_admin_required, api_login_required, error, has_
 from apps.common.utils import utcnow
 
 from .models import LEAVE_TYPES, LeaveBalance, LeaveRequest
-from .services import PtoError, cancel, create_request, decide
+from .services import PtoError, cancel, create_request, decide, edit_approved, ensure_balance
 
 
 def _serialize(req: LeaveRequest) -> dict:
@@ -35,7 +34,9 @@ def _serialize(req: LeaveRequest) -> dict:
 def balances(request):
     year = request.GET.get("year")
     year = int(year) if year and year.isdigit() else utcnow().year
-    rows = LeaveBalance.objects.filter(user=request.user, year=year)
+    for leave_type in LEAVE_TYPES:
+        ensure_balance(request.user, year, leave_type)
+    rows = LeaveBalance.objects.filter(user=request.user, year=year).order_by("leave_type")
     return ok({"year": year, "balances": [
         {"leave_type": b.leave_type, "accrued_days": b.accrued_days, "carryover_days": b.carryover_days,
          "used_days": b.used_days, "pending_days": b.pending_days, "available_days": b.available_days}
@@ -121,20 +122,95 @@ def request_cancel(request, leave_id):
 
 
 @api_admin_required
+@require_http_methods(["PATCH"])
+def request_edit(request, leave_id):
+    """Admin edit of an approved request: dates, days and reason."""
+    leave = get_object_or_404(LeaveRequest, pk=leave_id)
+    try:
+        data = read_json(request)
+        start = date.fromisoformat(str(data.get("start_date", "")))
+        end = date.fromisoformat(str(data.get("end_date", "")))
+        days = float(data.get("days_requested", 0))
+    except (ValueError, TypeError) as exc:
+        return error(400, f"Invalid request: {exc}")
+    reason = (data.get("reason") or "").strip() or None
+
+    before = {"start_date": leave.start_date.isoformat(), "end_date": leave.end_date.isoformat(),
+              "days_requested": leave.days_requested}
+    try:
+        leave = edit_approved(leave, request.user, start, end, days, reason)
+    except PtoError as exc:
+        return error(422, str(exc))
+    record(request, "UPDATE", "leave_request", leave.id, details={
+        "before": before,
+        "after": {"start_date": start.isoformat(), "end_date": end.isoformat(), "days_requested": days},
+    })
+    return ok(_serialize(leave))
+
+
+@api_login_required
+@require_GET
+def calendar(request):
+    """Leave events for a date range.
+    Default: the signed-in user's own leave only (used by the employee calendar).
+    ?scope=team: everyone's leave, admins only (used by the admin calendar)."""
+    def _parse(value):
+        return date.fromisoformat(value) if value else None
+
+    try:
+        start, end = _parse(request.GET.get("start")), _parse(request.GET.get("end"))
+    except ValueError:
+        return error(400, "start and end must be YYYY-MM-DD.")
+
+    team = request.GET.get("scope") == "team"
+    if team and not request.user.is_admin:
+        return error(403, "Not allowed.")
+
+    qs = LeaveRequest.objects.select_related("user").exclude(
+        status__in=[LeaveRequest.STATUS_REJECTED, LeaveRequest.STATUS_CANCELLED])
+    if not team:
+        qs = qs.filter(user=request.user)
+    if start:
+        qs = qs.filter(end_date__gte=start)
+    if end:
+        qs = qs.filter(start_date__lte=end)
+
+    events = []
+    for r in qs.order_by("start_date")[:1000]:
+        events.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "user_name": r.user.full_name,
+            "leave_type": r.leave_type,
+            "start_date": r.start_date.isoformat(),
+            "end_date": r.end_date.isoformat(),
+            "status": r.status,
+            "own": r.user_id == request.user.id,
+        })
+    return ok({"events": events})
+
+
+@api_admin_required
 @require_http_methods(["GET", "PUT"])
 def admin_user_balances(request, user_id):
-    """Admin sets accrual/carryover for an employee: PUT {year, leave_type, accrued_days, carryover_days}."""
+    """GET ?year=YYYY lists balances (creating missing ones from defaults).
+    PUT {year, leave_type, accrued_days, carryover_days} sets the entitlement for one type."""
     from apps.accounts.models import User
 
     owner = get_object_or_404(User, pk=user_id)
     if request.method == "GET":
-        rows = LeaveBalance.objects.filter(user=owner).order_by("-year", "leave_type")
-        return ok({"balances": [
+        year = request.GET.get("year")
+        year = int(year) if year and year.isdigit() else utcnow().year
+        for leave_type in LEAVE_TYPES:
+            ensure_balance(owner, year, leave_type)
+        rows = LeaveBalance.objects.filter(user=owner, year=year).order_by("leave_type")
+        return ok({"year": year, "balances": [
             {"year": b.year, "leave_type": b.leave_type, "accrued_days": b.accrued_days,
              "carryover_days": b.carryover_days, "used_days": b.used_days,
              "pending_days": b.pending_days, "available_days": b.available_days}
             for b in rows
         ]})
+
     try:
         data = read_json(request)
         year = int(data["year"])
@@ -145,56 +221,21 @@ def admin_user_balances(request, user_id):
         return error(400, f"Invalid balance: {exc}")
     if leave_type not in LEAVE_TYPES:
         return error(422, f"leave_type must be one of: {', '.join(LEAVE_TYPES)}.")
-    if accrued < 0 or carry < 0:
-        return error(422, "Days cannot be negative.")
-    balance, _ = LeaveBalance.objects.get_or_create(
-        user=owner, year=year, leave_type=leave_type, defaults={"accrued_days": 0.0},
-    )
-    balance.accrued_days = accrued
-    balance.carryover_days = carry
-    balance.save()
-    record(request, "UPDATE", "leave_balance", balance.id, details={"user_id": owner.id, "year": year, "type": leave_type})
-    return ok({"available_days": balance.available_days})
+    if accrued < 0 or carry < 0 or accrued % 0.5 or carry % 0.5:
+        return error(422, "Days must be non-negative multiples of 0.5.")
 
+    with transaction.atomic():
+        balance = ensure_balance(owner, year, leave_type)
+        spent = balance.used_days + balance.pending_days
+        if accrued + carry < spent:
+            return error(422, f"Total entitlement cannot be less than days already used or pending ({spent} days).")
+        before = {"accrued_days": balance.accrued_days, "carryover_days": balance.carryover_days}
+        balance.accrued_days = accrued
+        balance.carryover_days = carry
+        balance.save()
 
-def _parse_day(value: str | None):
-    if not value:
-        return None
-    return date.fromisoformat(value)
-
-
-@api_login_required
-@require_GET
-def calendar(request):
-    """Leave events for a date range. Privacy: colleagues see who is away (approved only) but not the leave type."""
-    from django.db.models import Q
-
-    try:
-        start, end = _parse_day(request.GET.get("start")), _parse_day(request.GET.get("end"))
-    except ValueError:
-        return error(400, "start and end must be YYYY-MM-DD.")
-
-    qs = LeaveRequest.objects.select_related("user").exclude(
-        status__in=[LeaveRequest.STATUS_REJECTED, LeaveRequest.STATUS_CANCELLED])
-    if start:
-        qs = qs.filter(end_date__gte=start)
-    if end:
-        qs = qs.filter(start_date__lte=end)
-    privileged = has_permission(request.user, "approve_leave")
-
-    events = []
-    for r in qs.order_by("start_date")[:1000]:
-        own = r.user_id == request.user.id
-        if not (privileged or own) and r.status != LeaveRequest.STATUS_APPROVED:
-            continue
-        events.append({
-            "id": r.id,
-            "user_id": r.user_id,
-            "user_name": r.user.full_name,
-            "leave_type": r.leave_type if (privileged or own) else None,
-            "start_date": r.start_date.isoformat(),
-            "end_date": r.end_date.isoformat(),
-            "status": r.status,
-            "own": own,
-        })
-    return ok({"events": events})
+    record(request, "UPDATE", "leave_balance", balance.id, details={
+        "user_id": owner.id, "year": year, "type": leave_type, "before": before,
+        "after": {"accrued_days": accrued, "carryover_days": carry},
+    })
+    return ok({"year": year, "leave_type": leave_type, "available_days": balance.available_days})

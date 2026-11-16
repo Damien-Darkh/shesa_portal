@@ -1,6 +1,7 @@
 """Serves the static frontend (frontend/) from the same origin as the API.
 
 HTML pages need a signed-in user (admin pages also need is_admin). Assets are public.
+The leave calendar page is only served when LEAVE_MANAGEMENT_ENABLED is on.
 """
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from apps.accounts.views import sso_login_url
 FRONTEND = Path(settings.BASE_DIR) / "frontend"
 PUBLIC_HTML = {"logout.html", "account_disabled.html"}
 ADMIN_HTML = {"admin.html", "add_user.html", "edit_user.html", "admin_user_created.html", "admin_department.html"}
+LEAVE_HTML = {"calander.html"}
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png",
@@ -32,6 +34,8 @@ def _resolve(rel: str) -> Path:
 @require_GET
 @never_cache
 def serve(request, path: str):
+    if path in LEAVE_HTML and not settings.LEAVE_MANAGEMENT_ENABLED:
+        raise Http404
     if path.endswith(".html") and path not in PUBLIC_HTML:
         if not request.user.is_authenticated:
             return HttpResponseRedirect(sso_login_url())

@@ -1,7 +1,8 @@
-// Admin: edit one employee (profile, access, VPN, NAS, devices, disable, delete). Changes go straight to the API.
+// Admin: edit one employee (profile, access, VPN, NAS, website, leave balances, devices, disable, delete).
 import { ready, dbData, requireAdmin, getIdParam, fullName, fillDepartmentSelect, showFlash, refreshIcons, t, confirmDialog, fmtDate, renderAvatar, readImageFile, setupBackLink } from '../layout.js';
 import { api } from '../api.js';
 import { refreshPeople } from '../store.js';
+import { renderBalanceTable } from '../balances.js';
 
 (async () => {
   if (!await ready) return;
@@ -10,6 +11,10 @@ import { refreshPeople } from '../store.js';
   const $ = id => document.getElementById(id);
   const me = dbData.currentUser;
   const id = getIdParam();
+  const leaveOn = !!me.leave_management_enabled;
+
+  // Leave sections only appear when LEAVE_MANAGEMENT_ENABLED is on.
+  document.querySelectorAll('.leave-only').forEach(el => { el.hidden = !leaveOn; });
 
   setupBackLink($('eu-back'), {
     fallbackHref: 'admin.html',
@@ -83,6 +88,7 @@ import { refreshPeople } from '../store.js';
     $('disable-btn').disabled = self;
   }
 
+  // Company website status. Only the employee can publish; admins can only hide.
   function renderWebsite() {
     const on = !!user.show_on_website;
     $('w-status').textContent = on ? t('Published on the website') : t('Not published');
@@ -94,6 +100,12 @@ import { refreshPeople } from '../store.js';
     $('w-sync-text').textContent = user.sanity_last_error
       ? t('The website is not up to date yet. It will retry automatically.')
       : t('Saved. The website will update shortly.');
+  }
+
+  // Leave balances for the current year (server creates missing types from the .env defaults).
+  function renderBalances() {
+    if (!leaveOn) return;
+    renderBalanceTable($('bal-tbody'), user.leave_balances || [], user.id, refreshAll);
   }
 
   const fill = () => {
@@ -109,6 +121,8 @@ import { refreshPeople } from '../store.js';
     $('f-bio').value = p.bio || '';
     renderAccessState();
     renderDisableState();
+    renderWebsite();
+    renderBalances();
     preview();
   };
 
@@ -247,7 +261,8 @@ import { refreshPeople } from '../store.js';
     }
   });
 
-  /* ---------- show on website ------------ */
+  /* ---------- Company website: hide only ---------- */
+
   $('w-hide').addEventListener('click', async () => {
     if (!await confirmDialog({
       title: t('Hide from website?'),
@@ -264,7 +279,7 @@ import { refreshPeople } from '../store.js';
       showFlash(error.message, 'error');
     }
   });
-  
+
   /* ---------- Danger zone: disable / enable, delete ---------- */
 
   $('disable-btn').addEventListener('click', async () => {

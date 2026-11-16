@@ -1,4 +1,5 @@
 """Dashboard, people directory, departments, notifications, CSRF bootstrap (JSON)."""
+from django.conf import settings
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -24,21 +25,27 @@ def csrf(request):
 def dashboard(request):
     from apps.accounts.models import AuditLog
     from apps.devices.models import Device
-    from apps.pto.models import LeaveBalance
 
     user = request.user
-    year = utcnow().year
-    balances = LeaveBalance.objects.filter(user=user, year=year)
     recent = AuditLog.objects.filter(user=user).order_by("-timestamp")[:10]
-    return ok({
-        "devices_count": Device.objects.filter(user=user).count(),
-        "unread_notifications": Notification.objects.filter(user=user, is_read=False).count(),
-        "leave_balances": [
+
+    leave_balances = []
+    if settings.LEAVE_MANAGEMENT_ENABLED:
+        from apps.pto.models import LeaveBalance
+
+        year = utcnow().year
+        leave_balances = [
             {"leave_type": b.leave_type, "year": b.year, "accrued_days": b.accrued_days,
              "used_days": b.used_days, "pending_days": b.pending_days, "carryover_days": b.carryover_days,
              "remaining_days": b.available_days}
-            for b in balances
-        ],
+            for b in LeaveBalance.objects.filter(user=user, year=year)
+        ]
+
+    return ok({
+        "devices_count": Device.objects.filter(user=user).count(),
+        "unread_notifications": Notification.objects.filter(user=user, is_read=False).count(),
+        "leave_management_enabled": bool(settings.LEAVE_MANAGEMENT_ENABLED),
+        "leave_balances": leave_balances,
         "recent_activity": [
             {"action": a.action, "resource_type": a.resource_type, "status": a.status,
              "timestamp": a.timestamp.isoformat()}
