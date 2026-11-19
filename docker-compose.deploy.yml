@@ -1,0 +1,5 @@
+# Overrides docker-compose.yml on servers: run the published image instead of building.
+services:
+  web:
+    image: ${PORTAL_IMAGE:-ghcr.io/your-org/shesa-portal:latest}
+    build: !reset null

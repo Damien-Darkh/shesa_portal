@@ -34,15 +34,6 @@ docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --bui
 3. Put client id/secret and `OIDC_SERVER_URL` (`https://<authentik>/application/o/<slug>/`) in `.env`.
 4. `GET /login` starts the flow. The first user to sign in becomes admin; everyone else is created on first sign-in, matched by email to any pre-created account.
 
-## Migrating from the old SQLite portal
-```bash
-python manage.py migrate
-python manage.py import_sqlite /path/to/portal.db            # dry run: row counts only
-python manage.py import_sqlite /path/to/portal.db --commit   # copies data in one transaction
-```
-The target tables must be empty. Primary keys are kept, PostgreSQL sequences are reset, and imported users are linked to their OIDC identity on their first sign-in.
-Users keep their names and status. Passwords do not exist in either system.
-
 ## API overview (all JSON, session-authenticated)
 | Area | Endpoints |
 |---|---|
