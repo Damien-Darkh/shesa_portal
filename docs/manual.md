@@ -9,19 +9,15 @@ Contents:
 3. Requirements
 4. Choosing the right architecture
 5. Preparing the configuration (`.env`)
-6. Deployment on Linux
-7. Deployment on Windows
-8. Deployment on macOS (Intel and Apple Silicon)
-9. Deployment on Synology DSM
-10. Deployment on QNAP QTS / QuTS hero
-11. Local identity server (Authentik) for testing
-12. Migration
-13. Operations: administration commands, backups, updates
-14. Modifying the portal
-15. User guide
-16. Security checklist
-17. Troubleshooting
-18. Appendix: environment variable reference, project layout, API overview
+6. Deployment from GitHub (Linux, Windows/WSL, macOS, Synology, QNAP)
+7. Local identity server (Authentik) for testing
+8. Migrating to another host
+9. Operations: administration commands, backups, updates
+10. Modifying the portal
+11. User guide
+12. Security checklist
+13. Troubleshooting
+14. Appendix: environment variable reference, project layout, API overview
 
 ---
 
@@ -59,10 +55,10 @@ The portal is a Django 6.1 backend (Python 3.13) with PostgreSQL 17 as its datab
 
 Containers (from `docker-compose.yml`):
 
-| Service    | Image                  | Purpose                                   |
-|------------|------------------------|-------------------------------------------|
-| `postgres` | `postgres:17-alpine`   | Application database                      |
-| `web`      | built from `Dockerfile`| Django app served by gunicorn on port 8000|
+| Service | Image | Purpose |
+| --- | --- | --- |
+| `postgres` | `postgres:17-alpine` | Application database |
+| `web` | built from `Dockerfile` | Django app served by gunicorn on port 8000 |
 
 Optional (from `docker-compose.authentik.yml`, for testing): `authentik-server`, `authentik-worker`, `authentik-postgres`, `authentik-redis`.
 
@@ -89,7 +85,7 @@ Ports published on the host are bound to `127.0.0.1` by default. A reverse proxy
 ### 3.2 External services
 
 | Service | Required | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Authentik (or any OIDC provider) | Yes (unless `USE_SSO=false` for development) | Sign-in and MFA |
 | OPNsense with WireGuard API | Only for VPN features | `WIREGUARD_BACKEND=mock` runs without it |
 | Synology DSM | Only for NAS accounts | Leave `DSM_URL` empty to disable |
@@ -110,7 +106,7 @@ The portal image is built for the processor of the machine running it. Find your
 ### 4.1 How to find the architecture
 
 | Operating system | Command | Result meaning |
-|---|---|---|
+| --- | --- | --- |
 | Linux | `uname -m` | `x86_64` = 64-bit Intel/AMD; `aarch64` = 64-bit ARM; `armv7l` = 32-bit ARM; `i686` / `i386` = 32-bit x86 |
 | macOS | `uname -m` | `arm64` = Apple Silicon (M1, M2, M3, M4 ...); `x86_64` = Intel Mac |
 | Windows (PowerShell) | `$env:PROCESSOR_ARCHITECTURE` | `AMD64` = 64-bit Intel/AMD; `ARM64` = Windows on ARM |
@@ -119,7 +115,7 @@ The portal image is built for the processor of the machine running it. Find your
 ### 4.2 Support matrix
 
 | Architecture | Typical hardware | Status | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **x86_64 (amd64)** | Intel/AMD PCs, servers, most NAS (Synology Plus/XS, QNAP Intel models) | **Fully supported** | Recommended default |
 | **aarch64 (arm64)** | Apple Silicon Macs, Raspberry Pi 4/5 with 64-bit OS, Synology/QNAP ARMv8 models, Windows on ARM | **Fully supported** | Build for `linux/arm64` |
 | **armv7 (32-bit ARM)** | Older Raspberry Pi (2/3 with 32-bit OS), older ARM NAS (e.g. Synology `armv7` DS models, QNAP TS-x31 ARMv7) | **Limited (best effort)** | Some Python packages (`cryptography`, `psycopg`, `Pillow`) have no prebuilt wheels for ARMv7, so builds are very slow and may fail. Use an external PostgreSQL server and expect to tune the build. Not recommended for production. |
@@ -182,7 +178,7 @@ Generate separate values for each of these:
 ### 5.3 Core settings
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `DJANGO_SETTINGS_MODULE` | `config.settings.production` | Use production settings |
 | `DJANGO_SECRET_KEY` | (generated) | Required in production |
 | `DJANGO_DEBUG` | `false` | Never `true` in production |
@@ -194,7 +190,7 @@ Generate separate values for each of these:
 ### 5.4 Database settings
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `DB_NAME` | `shesa_portal` | Database name |
 | `DB_USER` | `shesa` | Database user |
 | `DB_PASSWORD` | (strong password) | Database password |
@@ -204,7 +200,7 @@ Generate separate values for each of these:
 ### 5.5 Sign-in settings
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `USE_SSO` | `true` | `false` only for local development (auto-login as `DEV_USER_EMAIL`) |
 | `OIDC_PROVIDER_ID` | `authentik` | Provider identifier |
 | `OIDC_PROVIDER_NAME` | `SHESA SSO` | Name shown on the sign-in button |
@@ -219,7 +215,7 @@ Generate separate values for each of these:
 Used only when running the Authentik overlay (section 11) or when the portal creates Authentik accounts.
 
 | Variable | Meaning |
-|---|---|
+| --- | --- |
 | `AUTHENTIK_SECRET_KEY` | Authentik secret (generated) |
 | `AUTHENTIK_PG_PASS` | Authentik database password |
 | `AUTHENTIK_BOOTSTRAP_PASSWORD` | Initial password of the `akadmin` account |
@@ -232,7 +228,7 @@ Used only when running the Authentik overlay (section 11) or when the portal cre
 ### 5.7 VPN settings (OPNsense WireGuard)
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `WIREGUARD_BACKEND` | `opnsense` (production) or `mock` (testing) | `mock` simulates peers without a firewall |
 | `OPNSENSE_URL` | `https://fw.company.it` | OPNsense address |
 | `OPNSENSE_API_KEY` / `OPNSENSE_API_SECRET` | (from OPNsense user) | API credentials |
@@ -247,7 +243,7 @@ Used only when running the Authentik overlay (section 11) or when the portal cre
 ### 5.8 NAS settings (Synology DSM)
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `DSM_URL` | `https://nas.company.it:5001` | DSM address (empty disables NAS features) |
 | `DSM_ADMIN_USER` / `DSM_ADMIN_PASS` | (admin account) | Account that manages users |
 | `DSM_SHARE_GROUP` | `staff` | Group for staff |
@@ -258,7 +254,7 @@ Used only when running the Authentik overlay (section 11) or when the portal cre
 ### 5.9 E-mail settings
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `SMTP_SERVER` | `smtp.company.it` | Leave empty to disable welcome e-mails |
 | `SMTP_PORT` | `465` (SSL) or `587` (STARTTLS) | Port |
 | `SMTP_USER` / `SMTP_PASSWORD` | (mail account) | Credentials |
@@ -268,7 +264,7 @@ Used only when running the Authentik overlay (section 11) or when the portal cre
 ### 5.10 Website synchronisation (Sanity)
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `SANITY_SYNC_ENABLED` | `true` / `false` | Turns website sync on or off |
 | `SANITY_PROJECT_ID` | (Sanity project id) | Project |
 | `SANITY_DATASET` | `production` | Dataset |
@@ -281,7 +277,7 @@ Used only when running the Authentik overlay (section 11) or when the portal cre
 ### 5.11 Feature flags and leave defaults
 
 | Variable | Example | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `LEAVE_MANAGEMENT_ENABLED` | `true` / `false` | Shows leave pages, calendar, approvals and API |
 | `LEAVE_DEFAULT_VACATION_DAYS` | `26` | Initial yearly allowance |
 | `LEAVE_DEFAULT_SICK_DAYS` | `10` | Initial sick allowance |
@@ -308,327 +304,39 @@ LEAVE_MANAGEMENT_ENABLED=true
 
 ---
 
-## 6. Deployment on Linux
+## 6. Deployment from GitHub (Linux, Windows/WSL, macOS, Synology, QNAP)
 
-Tested layouts: Ubuntu, Debian, Fedora, Raspberry Pi OS (64-bit). Commands use `sudo`; add your user to the `docker` group to avoid it (`sudo usermod -aG docker $USER`, then log out and back in).
+Images are built by GitHub Actions and pushed to GitHub Container Registry (GHCR). Servers only pull them. No source build happens on the server.
 
-### 6.1 Install Docker
+### 6.1 One-time setup in GitHub
 
-Ubuntu/Debian:
+- Settings → Environments → create `production`. Add required reviewers if you want an approval step before deploy.
+- Settings → Secrets and variables → Actions, add:
+  - `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PORT` (optional), `DEPLOY_PATH` (the folder on the server that contains `docker-compose.yml` and `.env`)
+  - `DEPLOY_SSH_KEY`: a private key whose public key is in `~/.ssh/authorized_keys` on the server
+  - `GHCR_TOKEN`: a personal access token with `read:packages` (lets the server pull private images)
+- Packages → make `shesa-portal` private (recommended), or public if the code allows it.
 
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl git
-curl -fsSL https://get.docker.com | sudo sh
-sudo systemctl enable --now docker
-docker --version
-docker compose version
-```
+### 6.2 Server prerequisites
 
-Fedora/RHEL-like:
+Docker Engine and the Compose plugin (see sections 6.1 to 10 for each platform), SSH access for the deploy user, and a `.env` file in `DEPLOY_PATH` (copied once, never committed).
 
-```bash
-sudo dnf install -y dnf-plugins-core git
-sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-sudo systemctl enable --now docker
-```
-
-### 6.2 Get the project
+### 6.3 First deploy
 
 ```bash
-cd /opt
-sudo git clone <repository-url> shesa-portal
-sudo chown -R $USER:$USER /opt/shesa-portal
-cd /opt/shesa-portal
+cd /opt/shesa-portal            # DEPLOY_PATH
+docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d postgres
+docker compose -f docker-compose.yml -f docker-compose.deploy.yml pull web
+docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d web
 ```
 
-Or copy the project folder with `scp` or a file manager.
+### 6.4 Ongoing deploys
 
-### 6.3 Configure and start
+Push to `main` (deploys the latest build) or push a tag `v1.2.3` (deploys that release). The workflow builds for `linux/amd64` and `linux/arm64`, so Intel/AMD servers, Raspberry Pi 4/5, Apple Silicon hosts, and ARM64 NAS models all work. ARMv7 is not built; see section 4.2.
 
-```bash
-cp .env.example .env
-nano .env                      # set secrets and URLs, see section 5
-docker compose up -d --build postgres
-docker compose up -d --build web
-docker compose logs -f web     # wait for "Listening at: http://0.0.0.0:8000"
-```
+### 6.5 Rollback
 
-`web` runs `init_db` on each start (migrations plus default roles), so no separate migrate step is needed for a fresh install.
-
-### 6.4 Check
-
-```bash
-curl -I http://127.0.0.1:8000/login
-docker compose ps
-```
-
-### 6.5 Start at boot
-
-Docker is enabled at boot by the install above. Containers use `restart: unless-stopped`, so they restart automatically.
-
-### 6.6 Raspberry Pi and other ARM64 Linux
-
-Use a **64-bit** OS image (Raspberry Pi OS 64-bit, Ubuntu Server arm64). Install Docker as above; the `arm64` images are selected automatically. Use an SSD rather than an SD card for PostgreSQL data.
-
-For 32-bit ARMv7 (for example Raspberry Pi 2/3 with a 32-bit OS), see section 4.2. Use an external PostgreSQL server and budget a long first build.
-
----
-
-## 7. Deployment on Windows
-
-Supported: Windows 10 (22H2 or later) and Windows 11, 64-bit, with virtualisation enabled in BIOS/UEFI. Docker runs through WSL 2.
-
-### 7.1 Install WSL 2 and Docker Desktop
-
-1. Open PowerShell as Administrator and run:
-
-   ```powershell
-   wsl --install
-   ```
-
-   Restart when asked. Set the Ubuntu user name and password when it opens.
-
-2. Download **Docker Desktop** from docker.com and install it with the option **Use WSL 2 based engine** enabled.
-3. In Docker Desktop: Settings > Resources > WSL integration, enable your Ubuntu distribution.
-4. Verify in PowerShell:
-
-   ```powershell
-   docker version
-   docker compose version
-   ```
-
-### 7.2 Keep the project inside WSL
-
-Performance and file permissions are much better if the project lives in the Linux file system:
-
-```bash
-# inside the Ubuntu (WSL) terminal
-cd ~
-git clone <repository-url> shesa-portal
-cd shesa-portal
-cp .env.example .env
-nano .env
-```
-
-Open the folder in VS Code with the WSL extension if you prefer a graphical editor (`code .` from the WSL terminal).
-
-### 7.3 Start
-
-From the WSL terminal inside the project:
-
-```bash
-docker compose up -d --build postgres
-docker compose up -d --build web
-docker compose logs -f web
-```
-
-Open http://localhost:8000/login in a browser on Windows.
-
-### 7.4 Windows on ARM
-
-Windows on ARM (ARM64) runs the `arm64` images through Docker Desktop's emulation or native WSL. Use the same steps as above.
-
-### 7.5 Windows-specific notes
-
-- Docker Desktop must be running before `docker compose` commands work.
-- If port 8000 or 5432 is busy, change the host side of the mapping in `docker-compose.yml` (e.g. `"127.0.0.1:8080:8000"`).
-- Windows Defender Firewall: no inbound rule is needed while the portal is bound to `127.0.0.1`. For access from other PCs, put a reverse proxy in front (section 16).
-
----
-
-## 8. Deployment on macOS (Intel and Apple Silicon)
-
-### 8.1 Identify the Mac
-
-```bash
-uname -m
-```
-
-- `arm64` = Apple Silicon (M1 to M4): images are used natively.
-- `x86_64` = Intel Mac: images are used natively.
-
-### 8.2 Install Docker
-
-Option A, Docker Desktop: download from docker.com, choose the build for your chip (Apple Silicon or Intel), install, and start it.
-
-Option B, Colima (command-line, no GUI):
-
-```bash
-brew install colima docker docker-compose
-colima start --cpu 4 --memory 6 --disk 40 --arch aarch64   # use --arch x86_64 on Intel
-docker compose version
-```
-
-### 8.3 Configure and run
-
-```bash
-git clone <repository-url> ~/shesa-portal
-cd ~/shesa-portal
-cp .env.example .env
-open -e .env                       # or any editor
-docker compose up -d --build postgres
-docker compose up -d --build web
-docker compose logs -f web
-```
-
-Open http://localhost:8000/login.
-
-### 8.4 Apple Silicon notes
-
-- Build natively as `linux/arm64`. The default build on Apple Silicon already does this.
-- Never run an `amd64` image on Apple Silicon unless you accept slow emulation. If you must build for another platform: `docker buildx build --platform linux/amd64 ...`.
-- Keep Docker Desktop's memory at least 4 GB; the first build compiles several Python packages.
-
-### 8.5 Start at login
-
-Docker Desktop: Settings > General > "Start Docker Desktop when you sign in". Containers restart automatically thereafter. With Colima, run `colima start` at login (or use `brew services start colima`).
-
----
-
-## 9. Deployment on Synology DSM
-
-The portal can run on a Synology NAS that has **Container Manager** (DSM 7.2 or newer). Check the NAS model at https://www.synology.com/support (CPU architecture): Intel/AMD models are `x86_64`; many Plus and XS models are also x86_64. ARM models (for example DS220j, DS223j) are `armv7` or `aarch64`; see section 4.2 before continuing on ARM models.
-
-Hosting the portal on the same NAS as the file server is supported, but make sure the NAS has at least 2 GB free RAM for the containers, and keep the PostgreSQL data on the volume you back up.
-
-### 9.1 Prepare DSM
-
-1. **Control Panel > Terminal & SNMP**: enable **SSH service** (port 22). Use it only on the internal network, and disable it when finished.
-2. **Package Center**: install **Container Manager**.
-3. **Control Panel > Login Portal > Advanced**: note the DSM HTTP and HTTPS ports; keep them different from 8000 if you plan to publish the portal on that port.
-4. Create a shared folder for the project, for example `docker/shesa-portal`:
-   **Control Panel > Shared Folder > Create**. Enable recycle bin only if acceptable; it does not apply to Docker volumes.
-
-### 9.2 Copy the project
-
-Use File Station, or from your computer:
-
-```bash
-scp -r ./shesa-portal admin@nas.company.it:/volume1/docker/
-```
-
-Confirm the folder contains `Dockerfile`, `docker-compose.yml`, `requirements.txt` and `manage.py`.
-
-### 9.3 Create `.env`
-
-Over SSH:
-
-```bash
-ssh admin@nas.company.it
-cd /volume1/docker/shesa-portal
-cp .env.example .env
-vi .env          # or: sudo nano .env (install nano from Package Center if needed)
-```
-
-Set at least: secrets, `PUBLIC_APP_URL`, `ALLOWED_HOSTS` (include the NAS LAN address), `NAS_IP` (the NAS address), `DSM_URL` (for example `https://127.0.0.1:5001` if the portal runs on the same NAS, or the LAN address).
-
-Set `DSM_URL` to an address the container can reach. From inside a container, `127.0.0.1` is the container itself, so use the NAS LAN IP (e.g. `https://192.168.1.50:5001`) and set `VERIFY_SSL=false` only if DSM uses a self-signed certificate that you cannot trust otherwise.
-
-### 9.4 Start with Docker Compose
-
-Container Manager supports Compose projects:
-
-**Option A (recommended): Project in Container Manager**
-
-1. Container Manager > **Project** > **Create**.
-2. Name: `shesa-portal`. Path: `/volume1/docker/shesa-portal`. Source: "Create docker-compose.yml" is not needed because the file already exists; choose **Use existing docker-compose.yml**.
-3. Enable the web UI option only if you need it. Press **Next**, then **Done** to build and start.
-4. Watch logs under Container > `shesa-web` > Log.
-
-**Option B: SSH**
-
-```bash
-cd /volume1/docker/shesa-portal
-sudo docker compose up -d --build postgres
-sudo docker compose up -d --build web
-sudo docker compose logs -f web
-```
-
-On DSM, `docker` commands usually need `sudo`.
-
-### 9.5 Ports and reverse proxy on DSM
-
-The portal listens on `127.0.0.1:8000` on the NAS. To expose it as HTTPS on the LAN or internet:
-
-1. **Control Panel > Login Portal > Advanced > Reverse Proxy > Create**:
-   - Source: protocol HTTPS, hostname `portal.company.it`, port 443.
-   - Destination: protocol HTTP, hostname `localhost`, port 8000.
-2. Under the reverse proxy entry's **Custom Header**, add `X-Forwarded-Proto: https` (DSM usually sends it; confirm).
-3. Install a certificate for `portal.company.it`: **Control Panel > Security > Certificate > Add**, or use Let's Encrypt from the same page.
-4. Set `PUBLIC_APP_URL=https://portal.company.it`, `SECURE_SSL_REDIRECT=true`, and restart the web container.
-
-### 9.6 Synology-specific notes
-
-- Data lives in Docker volumes managed by Container Manager. Back them up (section 13.2).
-- If port 8000 is used by another DSM package, change the published port in `docker-compose.yml` (for example `"127.0.0.1:8090:8000"`) and update the reverse proxy target.
-- Keep the DSM Auto Update setting so security patches are applied; rebuild the portal after NAS updates (`docker compose up -d --build web`).
-- The NAS's own TCP 445 must remain reachable from the VPN clients for the setup files to work (set in OPNsense/firewall rules).
-
----
-
-## 10. Deployment on QNAP (QTS and QuTS hero)
-
-The portal runs on QNAP NAS with **Container Station** (QTS 5.x). Identify the CPU: in QTS, **Control Panel > System > General Settings > Model** or `uname -m` over SSH. `x86_64` models are Intel/AMD. `aarch64` models are ARM64 (TS-x53D and newer ARM models). `armv7l` models (TS-x31 series and older) are limited, see section 4.2.
-
-### 10.1 Prepare QTS
-
-1. **App Center**: install **Container Station**.
-2. **Control Panel > Network & File Services > Telnet/SSH**: enable SSH (port 22) temporarily.
-3. **Control Panel > Applications > Web Server** or **Qfile**: note the QTS HTTP/HTTPS ports (defaults 8080 and 443). Choose ports for the portal that do not collide with QTS.
-4. Create a shared folder: **Control Panel > Privilege > Shared Folders > Create**, name `docker`. Put the project in `docker/shesa-portal`.
-
-### 10.2 Copy and configure
-
-From your computer:
-
-```bash
-scp -r ./shesa-portal admin@qnap.company.it:/share/docker/
-ssh admin@qnap.company.it
-cd /share/docker/shesa-portal
-cp .env.example .env
-vi .env
-```
-
-Set the same variables as in section 9.3. QNAP has the same restriction: inside a container `127.0.0.1` is not the NAS, so set `DSM_URL` / `OPNSENSE_URL` / other hosts to real LAN addresses, and set `NAS_IP` to the QNAP's address.
-
-### 10.3 Start with Container Station
-
-**Option A: Compose in Container Station**
-
-1. Container Station > **Applications** > **Create** (or **Create Application**).
-2. Paste the contents of `docker-compose.yml` (see note below), set the environment variables from `.env` in the form, and deploy.
-
-Note: Container Station's form does not read `.env` files. Either paste the variables manually, or use Option B.
-
-**Option B: SSH (recommended)**
-
-Container Station ships Docker Compose:
-
-```bash
-cd /share/docker/shesa-portal
-docker compose version || export PATH=$PATH:/usr/local/bin
-sudo docker compose up -d --build postgres
-sudo docker compose up -d --build web
-sudo docker compose logs -f web
-```
-
-If `docker compose` is not found, check the path with `ls /share/CACHEDEV1_DATA/.qpkg/container-station/bin/` and add it to `PATH`.
-
-### 10.4 Reverse proxy on QTS
-
-1. **Control Panel > Network & File Services > Web Server**: note the port. Create a reverse proxy using **Application Layer** > **Reverse Proxy** in the QTS App Center (or use the **NGINX-based** app from the App Center).
-2. Route `https://portal.company.it` to `http://127.0.0.1:8000`.
-3. Import a certificate under **Control Panel > Security > Certificate & Private Key**.
-4. Set `PUBLIC_APP_URL=https://portal.company.it` and restart the web container.
-
-### 10.5 QNAP-specific notes
-
-- Container Station project folders are in the shared folder you chose; back them up with Hybrid Backup Sync.
-- On QuTS hero, the same steps apply; the Container Station version may be different, so the menu names can vary.
-- Disable SSH after setup.
-- Keep ports 8000 and 5432 bound to `127.0.0.1` (the default in `docker-compose.yml`).
+Edit the image tag in the deploy command to a previous `sha-xxxxxxx` or `v1.x.y` tag and run `up -d web` again. Database migrations are not reversed automatically; restore a backup if a release changed the schema (section 13.2).
 
 ---
 
@@ -666,7 +374,7 @@ docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --bui
 
 ### 11.3 Create the first user
 
-1. Open http://sso.shesa.local:9000/if/admin/ and sign in as `akadmin` with `AUTHENTIK_BOOTSTRAP_PASSWORD`.
+1. Open [http://sso.shesa.local:9000/if/admin/](http://sso.shesa.local:9000/if/admin/) and sign in as `akadmin` with `AUTHENTIK_BOOTSTRAP_PASSWORD`.
 2. **Directory > Users > Create**: fill in an e-mail and set a password.
 3. **System > Blueprints**: check that "Shesa Portal - OIDC sign-in" shows as successful.
 4. Open http://localhost:8000/login and sign in with the user. **The first user who signs in becomes the portal administrator.**
@@ -686,101 +394,92 @@ In Authentik: **Directory > Tokens and App passwords > Create**, type "API", use
 
 ---
 
-## 12. Migration
+## 12. Migrating to another host
 
-There are three kinds of migration: a **fresh install**, a **data import from the old SQLite portal**, and **version upgrades** of the portal itself.
+Migration moves four things: the portal database, the Authentik database and media, the `.env` file, and the Docker volumes that hold uploads. Do it in this order. Plan a maintenance window; the old host must stop writing before the dump is taken.
 
-### 12.1 Fresh install
+### 12.1 Prepare the new host
 
-Follow sections 6 to 10. `init_db` runs migrations and creates default roles automatically. Then:
+Install Docker and the Compose plugin, create the same folder layout, and copy the repository (or let the first GitHub deploy create the images). Do not start the new stack yet.
 
-1. Sign in with the first SSO user (becomes admin).
-2. Run `seed_data` once to set the Sites domain from `PUBLIC_APP_URL` (see section 13.1).
-
-### 12.2 Import from the old SQLite portal
-
-Use this when moving from the legacy SQLite-based portal.
-
-1. **Back up** the old database file (`portal.db`) and keep a copy off the server.
-2. Copy `portal.db` to the server, for example to `/opt/shesa-portal/import/portal.db`. Make it readable by Docker (`chmod 644`).
-3. Make sure the target PostgreSQL tables are **empty**: the import refuses to write into non-empty tables. For a fresh deployment this is true; if you already logged in with the new system, reset the database first (section 12.5).
-4. Start the database and the web container, and run migrations so the schema exists:
-
-   ```bash
-   docker compose up -d --build postgres web
-   docker compose exec web python manage.py migrate
-   ```
-
-5. Mount or copy the SQLite file into the container. Simplest: copy it into the running container:
-
-   ```bash
-   docker compose cp import/portal.db web:/tmp/portal.db
-   ```
-
-6. **Dry run** (counts only, no writes):
-
-   ```bash
-   docker compose exec web python manage.py import_sqlite /tmp/portal.db
-   ```
-
-   Check the row counts for each table against the old system.
-
-7. **Commit** (one transaction, all or nothing):
-
-   ```bash
-   docker compose exec web python manage.py import_sqlite /tmp/portal.db --commit
-   ```
-
-8. Verify: sign in as the administrator, check employees, departments, devices and leave balances.
-
-What the import does:
-
-- Copies tables by name, keeps primary keys, and resets PostgreSQL sequences so new records continue after the imported IDs.
-- Skips columns that no longer exist (for example the old WorkOS id column).
-- Imports users with names and status. **Passwords are not migrated** (none exist in either system). Users sign in through SSO; their SSO account is linked by e-mail on first sign-in.
-- Imports leave tables only if they existed in the old database.
-
-Delete the copy of `portal.db` from `/tmp` and from the import folder when finished, because it contains personal data.
-
-### 12.3 Import the Authentik side
-
-Employees must exist in Authentik with the **same e-mail address** as in the portal, or they will be created on first sign-in if SSO auto-signup is enabled. Create missing accounts in Authentik before going live, or let them sign in once.
-
-### 12.4 Upgrade the portal (new release)
+### 12.2 Freeze the old host
 
 ```bash
-cd /opt/shesa-portal                  # or your project folder
-git pull                              # or copy the new files over the old ones (keep .env)
-docker compose build web
-docker compose up -d web              # init_db runs migrations automatically on start
-docker compose logs -f web
+cd /opt/shesa-portal
+docker compose stop web
 ```
 
-Rules:
-
-- Never delete the `postgres_data` volume during an upgrade.
-- Read the release notes for new `.env` variables and add them to `.env` (compare against `.env.example`).
-- Take a backup (section 13.2) before every upgrade.
-- If a migration fails, the container stops; fix the cause, restore the backup if needed, and start again.
-
-Rollback: stop `web`, restore the database backup, check out the previous version of the code, and rebuild.
-
-### 12.5 Reset the database (test environments only)
-
-Destroys all data.
+### 12.3 Dump the portal database
 
 ```bash
-docker compose down
-docker volume rm shesa-portal_postgres_data      # the exact name is shown by: docker volume ls
-docker compose up -d --build postgres web
+docker compose exec -T postgres pg_dump -U shesa -d shesa_portal -Fc > shesa_portal.dump
 ```
 
-### 12.6 Moving the portal to another machine
+### 12.4 Dump the Authentik database
 
-1. On the old machine: back up the database (section 13.2) and copy `.env` (securely).
-2. On the new machine: install Docker, copy the project and `.env`, then restore the database backup (section 13.3).
-3. Update DNS and the reverse proxy.
-4. Update `PUBLIC_APP_URL` and the Authentik redirect URIs if the address changes.
+```bash
+docker compose -f docker-compose.yml -f docker-compose.authentik.yml exec -T authentik-postgres \
+  pg_dump -U authentik -d authentik -Fc > authentik.dump
+```
+
+### 12.5 Copy Authentik media and certificates
+
+Authentik stores uploaded files and generated certificates in Docker volumes. Export them:
+
+```bash
+for v in authentik_media authentik_certs; do
+  docker run --rm -v "${v}:/data" -v "$PWD:/backup" alpine \
+    tar czf "/backup/${v}.tgz" -C /data .
+done
+```
+
+### 12.6 Copy the secrets and the dumps
+
+Copy `.env`, `shesa_portal.dump`, `authentik.dump`, and the two `.tgz` files to the new host with `scp` over the internal network. Keep `.env` secret; delete the dumps from both hosts when migration is verified.
+
+### 12.7 Restore on the new host
+
+```bash
+cd /opt/shesa-portal
+docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d postgres authentik-postgres
+docker compose exec -T postgres pg_restore -U shesa -d shesa_portal --clean --if-exists < shesa_portal.dump
+docker compose -f docker-compose.yml -f docker-compose.authentik.yml exec -T authentik-postgres \
+  pg_restore -U authentik -d authentik --clean --if-exists < authentik.dump
+for v in authentik_media authentik_certs; do
+  docker volume create "$v"
+  docker run --rm -v "${v}:/data" -v "$PWD:/backup" alpine \
+    sh -c "cd /data && tar xzf /backup/${v}.tgz"
+done
+```
+
+If the restored Authentik database is from a different Authentik release, pin the same `AUTHENTIK_IMAGE` as the old host before starting it.
+
+### 12.8 Start the stack
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d web
+docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d authentik-server authentik-worker
+```
+
+### 12.9 Cut over
+
+- Point DNS for the portal and the SSO host at the new host (or change the reverse proxy target).
+- If the hostnames or URLs changed, update `PUBLIC_APP_URL`, `OIDC_SERVER_URL`, `OIDC_REDIRECT_URI`, and the redirect URIs in the Authentik provider, then restart `web`.
+- Sign in with an administrator account and check: employees, devices, leave balances, departments, and one sign-in through Authentik.
+- Re-register scheduled jobs on the new host (for example `sanity_retry_pending`, every 5 minutes).
+
+### 12.10 Retire the old host
+
+Keep the old host stopped (not deleted) for a week as a fallback. After that, remove the dumps, revoke the old host's SSH key in GitHub secrets, and delete `.env` copies that are no longer needed.
+
+### 12.11 Verify the restore
+
+```bash
+docker compose exec web python manage.py check
+docker compose exec web python manage.py shell -c "from apps.accounts.models import User; print(User.objects.count())"
+```
+
+Compare the user count with the old host before the freeze.
 
 ---
 
@@ -795,12 +494,11 @@ docker compose exec web python manage.py <command>
 ```
 
 | Command | Purpose |
-|---|---|
+| --- | --- |
 | `init_db` | Applies migrations and seeds roles/permissions. Runs automatically at each start. Safe to repeat. |
 | `migrate` | Applies migrations only. |
 | `seed_rbac` | Creates default roles and permissions (safe to repeat). |
 | `seed_data` | Seeds roles and sets the Sites domain from `PUBLIC_APP_URL`. |
-| `import_sqlite <file> [--commit]` | Imports the legacy SQLite portal (section 12.2). |
 | `sanity_backfill [--dry-run] [--refresh] [--limit N]` | Publishes employees to the website (Sanity). `--refresh` updates everyone. |
 | `sanity_retry_pending` | Retries failed website pushes. Run every few minutes from cron. |
 | `sample_credentials` | Writes a test credential PDF to the working directory (layout checks only). |
@@ -837,6 +535,8 @@ Restore into an empty database:
 ```bash
 docker compose exec -T postgres pg_restore -U shesa -d shesa_portal --clean --if-exists < /opt/backups/shesa_portal_2026-11-01.dump
 ```
+
+Back up the same four items as in section 12, on a schedule, and test a restore on a spare machine every quarter.
 
 ### 13.3 Restore on a new server
 
@@ -922,7 +622,7 @@ Edit `frontend/layout.js`:
 - `CALENDAR_ITEM`, `ADMIN_ITEM`: optional items.
 - `PAGE_TO_NAV`: which menu item is highlighted for each page file.
 
-Icons: any name from https://lucide.dev (version 0.383.0 is vendored in `frontend/vendor/`).
+Icons: any name from [https://lucide.dev](https://lucide.dev) (version 0.383.0 is vendored in `frontend/vendor/`).
 
 ### 14.4 Add a new page
 
@@ -939,7 +639,6 @@ Icons: any name from https://lucide.dev (version 0.383.0 is vendored in `fronten
      refreshIcons();
    })();
    ```
-
 3. Add the page to `PAGE_TO_NAV` and, if it needs a menu item, to `NAV_ITEMS` in `layout.js`.
 4. Protect admin-only pages: add the file name to `ADMIN_HTML` in `apps/common/pages.py`. Employee pages need no change (any signed-in user).
 
@@ -1095,7 +794,7 @@ Important: the configuration contains a private key. Do not share it. After you 
 
 **Windows note**: Windows may show a security prompt. Choose "More info", then "Run anyway". The setup runs as administrator.
 
-**macOS note**: if the `.command` file is blocked, right-click it and choose **Open**. The setup needs Homebrew to install WireGuard tools; if Homebrew is missing, install it from https://brew.sh and run the file again.
+**macOS note**: if the `.command` file is blocked, right-click it and choose **Open**. The setup needs Homebrew to install WireGuard tools; if Homebrew is missing, install it from [https://brew.sh](https://brew.sh) and run the file again.
 
 **Linux note**: run the `.sh` file as your normal user (`bash install-nas-signout-cleanup.sh`); it asks for your password when root rights are needed.
 
@@ -1233,7 +932,7 @@ Before go-live, confirm each item:
 ## 17. Troubleshooting
 
 | Symptom | Likely cause | What to do |
-|---|---|---|
+| --- | --- | --- |
 | `web` restarts repeatedly | Missing or wrong `.env` value (for example `DJANGO_SECRET_KEY` empty in production) | `docker compose logs web`; fix the variable; `docker compose up -d web` |
 | `DJANGO_SECRET_KEY must be set in production` | Empty secret | Generate one (section 5.2) |
 | `Bad Request (400)` in the browser | Hostname not in `ALLOWED_HOSTS` | Add the hostname; restart `web` |
@@ -1248,7 +947,6 @@ Before go-live, confirm each item:
 | Welcome e-mail not sent | SMTP settings wrong | Test with `docker compose exec web python -c "import smtplib;..."`; check port 465 vs 587 |
 | Website shows old data | Sanity push pending | Check the profile warning; run `sanity_retry_pending`; check `SANITY_WRITE_TOKEN` |
 | Migration fails on start | Database not reachable or previous failed migration | `docker compose logs postgres web`; restore backup if needed |
-| `import_sqlite` says table not empty | Target already has data | Reset the database (section 12.5) before importing |
 | Build is very slow or fails on ARMv7 | No prebuilt wheels for some packages | Use an ARM64 or x86_64 machine, or see section 4.2 |
 | `exec format error` when starting a container | Image built for another CPU | Rebuild with `docker compose build --no-cache web` on the target machine |
 | Port already allocated | Another program uses 8000 or 5432 | Change the host port in `docker-compose.yml` |
@@ -1273,7 +971,7 @@ docker compose exec postgres psql -U shesa -d shesa_portal -c "select count(*) f
 ### 18.1 Environment variable reference (summary)
 
 | Group | Variables |
-|---|---|
+| --- | --- |
 | Django | `DJANGO_SETTINGS_MODULE`, `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `ALLOWED_HOSTS`, `PUBLIC_APP_URL`, `SECURE_SSL_REDIRECT`, `LOG_LEVEL` |
 | Database | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_CONN_MAX_AGE` |
 | Sign-in | `USE_SSO`, `OIDC_PROVIDER_ID`, `OIDC_PROVIDER_NAME`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SERVER_URL`, `OIDC_REDIRECT_URI`, `LOGIN_REDIRECT_URL`, `DEV_USER_EMAIL` |
@@ -1283,7 +981,6 @@ docker compose exec postgres psql -U shesa -d shesa_portal -c "select count(*) f
 | E-mail | `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SENDER_EMAIL`, `COMPANY_NAME` |
 | Website | `SANITY_SYNC_ENABLED`, `SANITY_PROJECT_ID`, `SANITY_DATASET`, `SANITY_API_VERSION`, `SANITY_WRITE_TOKEN`, `SANITY_SYNC_TIME`, `SANITY_RETRY_INTERVAL_MINUTES`, `SANITY_MAX_ATTEMPTS` |
 | Features | `LEAVE_MANAGEMENT_ENABLED`, `LEAVE_DEFAULT_VACATION_DAYS`, `LEAVE_DEFAULT_SICK_DAYS`, `LEAVE_DEFAULT_PERSONAL_DAYS` |
-| Migration | `LEGACY_SQLITE_PATH` (optional reference for the import) |
 
 ### 18.2 Docker commands cheat sheet
 
@@ -1305,12 +1002,12 @@ Note: changing `.env` requires `docker compose up -d web` (the container reads t
 All endpoints return JSON and use the signed-in session. Writes need the CSRF token (handled by the frontend).
 
 | Area | Endpoints |
-|---|---|
-| Auth | `GET /login`, `GET /logout`, `GET /api/auth/config/`, `GET /api/me/`, `PATCH /api/me/`, `POST /api/me/dsm-password`, `GET /api/me/projects/`, `POST|DELETE /api/me/photo` |
-| Core | `GET /api/dashboard/`, `GET /api/people/`, `GET /api/departments/`, `POST /api/departments/create`, `PATCH|DELETE /api/departments/<id>/`, `GET /api/notifications/`, `POST /api/notifications/<id>/read`, `POST /api/notifications/read-all` |
-| Devices | `GET /api/devices/`, `POST /api/devices/create`, `POST /api/devices/<id>/revoke|reconnect|delete`, `GET /api/devices/<id>/launcher.cmd|launcher.command|launcher.sh` |
-| Leave (when enabled) | `GET /api/pto/balances/`, `GET /api/pto/calendar/`, `GET|POST /api/pto/requests/...`, `POST /api/pto/requests/<id>/approve|reject|cancel`, `PATCH /api/pto/requests/<id>/edit`, `GET|PUT /api/admin/users/<id>/leave-balances` |
-| Admin | `GET|POST /api/admin/users/`, `GET|PATCH|DELETE /api/admin/users/<id>/`, `POST /api/admin/users/<id>/toggle-disabled|toggle-admin|reset-nas-password|reset-authentik-password|identity-id/replace`, `POST /api/admin/users/<id>/devices`, `GET /api/admin/audit-logs/` |
+| --- | --- |
+| Auth | `GET /login`, `GET /logout`, `GET /api/auth/config/`, `GET /api/me/`, `PATCH /api/me/`, `POST /api/me/dsm-password`, `GET /api/me/projects/`, \`POST |
+| Core | `GET /api/dashboard/`, `GET /api/people/`, `GET /api/departments/`, `POST /api/departments/create`, \`PATCH |
+| Devices | `GET /api/devices/`, `POST /api/devices/create`, \`POST /api/devices//revoke |
+| Leave (when enabled) | `GET /api/pto/balances/`, `GET /api/pto/calendar/`, \`GET |
+| Admin | \`GET |
 
 ### 18.4 Glossary
 

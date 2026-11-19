@@ -187,6 +187,7 @@ const NAV_ITEMS = [
 ];
 const CALENDAR_ITEM = { key: 'calendar', label: 'Calendar', href: 'calander.html', icon: 'calendar-days' };
 const ADMIN_ITEM = { key: 'admin', label: 'Admin Panel', href: 'admin.html', icon: 'shield' };
+const DOCS_ITEM = { key: 'docs', label: 'Docs', href: 'docs.html', icon: 'book-open' };
 
 const PAGE_TO_NAV = {
   'index.html': 'dashboard',
@@ -202,6 +203,7 @@ const PAGE_TO_NAV = {
   'admin_user_created.html': 'admin',
   'admin_department.html': 'admin',
   'person.html': 'directory',
+  'docs.html': 'docs',
 };
 
 /** Reads an image file as a data URL (stored as the profile photo). Size is limited to keep rows small. */
@@ -359,7 +361,7 @@ function buildHeader() {
 
   const items = [...NAV_ITEMS];
   if (leaveOn) items.splice(2, 0, CALENDAR_ITEM);   // before Profile
-  if (user && user.is_admin) items.push(ADMIN_ITEM);
+  if (user && user.is_admin) items.push(ADMIN_ITEM, DOCS_ITEM);
 
   // Brand
   const logo = el('img', { src: LOGO_SRC, alt: 'Company Logo' });

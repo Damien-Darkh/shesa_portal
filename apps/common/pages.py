@@ -9,6 +9,7 @@ from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
+from apps.common.http import api_admin_required
 
 from apps.accounts.views import sso_login_url
 
@@ -22,6 +23,7 @@ CONTENT_TYPES = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".ico": "image/x-icon", ".woff2": "font/woff2",
 }
 
+MANUAL_PATH = Path(settings.BASE_DIR) / "docs" / "manual.md"
 
 def _resolve(rel: str) -> Path:
     base = FRONTEND.resolve()
@@ -30,6 +32,19 @@ def _resolve(rel: str) -> Path:
         raise Http404
     return path
 
+
+@api_admin_required
+@require_GET
+@never_cache
+def manual(request):
+    if not MANUAL_PATH.is_file():
+        raise Http404
+    return FileResponse(
+        open(MANUAL_PATH, "rb"),
+        content_type="text/markdown; charset=utf-8",
+        as_attachment=True,
+        filename="manual.md",
+    )
 
 @require_GET
 @never_cache

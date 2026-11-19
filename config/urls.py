@@ -17,6 +17,7 @@ urlpatterns = [
     *([path("api/pto/", include("apps.pto.urls"))] if settings.LEAVE_MANAGEMENT_ENABLED else []),
     # Frontend (same origin). Static assets, then HTML pages behind login.
     path("favicon.ico", RedirectView.as_view(url="/logo.svg", permanent=True)),
+    path("api/docs/manual.md", pages.manual, name="docs_manual"),
     path("", pages.root),
     re_path(r"^(?P<path>(?:vendor/|pages/)?[\w.-]+\.(?:html|css|js|svg|png|jpe?g|ico|woff2))$", pages.serve),
 ]
