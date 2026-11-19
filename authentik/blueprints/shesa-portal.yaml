@@ -83,23 +83,33 @@ entries:
       provider: !KeyOf portal-provider
       meta_launch_url: !Format ["%s/accounts/oidc/authentik/login/", !Env [PORTAL_BASE_URL, "http://localhost:8000"]]
 
-  # ---- Login redirect: non-admins who log in directly on Authentik go to the portal ----
+    # ---- Login redirect: everyone except allowlisted users is sent to the portal ----
   - model: authentik_policies_expression.expressionpolicy
     id: direct-login-policy
     state: present
     identifiers:
-      name: direct-login-non-admin
+      name: direct-login-non-allowlisted
     attrs:
-      expression: |
-        # Superusers stay on Authentik. Everyone else is redirected, unless the
-        # login was started by the portal (next points at the OIDC authorize URL).
-        if request.user.is_superuser:
-            return False
-        http_request = request.http_request
-        nxt = http_request.GET.get("next", "") if http_request else ""
-        return "/application/o/authorize" not in nxt
+      expression: !Format
+        - |
+          # Returns True to redirect the user to the portal, False to let them stay on Authentik.
+          user = request.user
+          http_request = request.http_request
+          nxt = http_request.GET.get("next", "") if http_request else ""
 
-  - model: authentik_stages_redirect.redirectstage
+          # Logins started by the portal always proceed.
+          if "/application/o/authorize" in nxt:
+              return False
+
+          # Superusers stay on Authentik so the admin UI cannot be locked out.
+          if user.is_superuser:
+              return False
+
+          # Allowlist from PORTAL_DIRECT_LOGIN_ALLOWLIST (comma-separated usernames or emails).
+          allowed = {u.strip().lower() for u in "%s".split(",") if u.strip()}
+          candidates = {(user.username or "").lower(), (user.email or "").lower()}
+          return not (candidates & allowed)
+        - !Env [PORTAL_DIRECT_LOGIN_ALLOWLIST, ""]  - model: authentik_stages_redirect.redirectstage
     id: portal-login-redirect
     state: present
     identifiers:
